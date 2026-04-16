@@ -48,7 +48,7 @@ Optional environment variable:
 
 - ACP `mcpServers` are projected to Codex thread config as `config.mcp_servers` for `stdio` and `http` transports
 - ACP `sse` MCP transport is currently ignored (Codex app-server config does not accept SSE MCP transport shape)
-- `item/tool/requestUserInput` currently returns empty answers
+- `item/tool/requestUserInput` currently uses fallback (auto-select first option per question), chưa interactive thật
 - `session/set_mode` and `session/set_model` update session defaults and apply on subsequent turns
 
 ## Quick sanity test

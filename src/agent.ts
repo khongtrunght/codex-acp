@@ -73,6 +73,8 @@ type SessionState = {
   currentModeId: string;
   currentModelId: string;
   promptWaiter: PromptWaiter | null;
+  planDeltaByItemId: Map<string, string>;
+  terminalProcessByItemId: Map<string, string>;
 };
 
 export class CodexAcpAgent implements Agent {
@@ -152,6 +154,8 @@ export class CodexAcpAgent implements Agent {
       currentModeId,
       currentModelId: modelState.currentModelId,
       promptWaiter: null,
+      planDeltaByItemId: new Map(),
+      terminalProcessByItemId: new Map(),
     };
 
     rpc.setNotificationHandler((notification) => this.handleNotification(session, notification));
@@ -196,6 +200,8 @@ export class CodexAcpAgent implements Agent {
       currentModeId,
       currentModelId: modelState.currentModelId,
       promptWaiter: null,
+      planDeltaByItemId: new Map(),
+      terminalProcessByItemId: new Map(),
     };
 
     rpc.setNotificationHandler((notification) => this.handleNotification(session, notification));
@@ -405,6 +411,19 @@ export class CodexAcpAgent implements Agent {
       case "item/started":
         await this.handleItemStarted(session, p.item);
         return;
+      case "item/plan/delta": {
+        const previous = session.planDeltaByItemId.get(p.itemId) ?? "";
+        const next = previous + (p.delta ?? "");
+        session.planDeltaByItemId.set(p.itemId, next);
+        await this.client.sessionUpdate({
+          sessionId: session.sessionId,
+          update: {
+            sessionUpdate: "plan",
+            entries: [{ content: next, priority: "medium", status: "in_progress" }],
+          },
+        });
+        return;
+      }
       case "item/commandExecution/outputDelta":
         await this.client.sessionUpdate({
           sessionId: session.sessionId,
@@ -414,6 +433,12 @@ export class CodexAcpAgent implements Agent {
             status: "in_progress",
             kind: "execute",
             rawOutput: p.delta ?? "",
+            _meta: {
+              terminal_output: {
+                terminal_id: session.terminalProcessByItemId.get(p.itemId) ?? p.itemId,
+                data: p.delta ?? "",
+              },
+            },
           },
         });
         return;
@@ -453,6 +478,19 @@ export class CodexAcpAgent implements Agent {
           update: {
             sessionUpdate: "session_info_update",
             title: p.name ?? null,
+          },
+        });
+        return;
+      case "turn/plan/updated":
+        await this.client.sessionUpdate({
+          sessionId: session.sessionId,
+          update: {
+            sessionUpdate: "plan",
+            entries: (Array.isArray(p.plan) ? p.plan : []).map((entry: any) => ({
+              content: entry.step ?? "",
+              priority: "medium",
+              status: entry.status === "inProgress" ? "in_progress" : entry.status ?? "pending",
+            })),
           },
         });
         return;
@@ -500,6 +538,10 @@ export class CodexAcpAgent implements Agent {
       return;
     }
 
+    if (item.type === "commandExecution" && item.processId) {
+      session.terminalProcessByItemId.set(item.id, item.processId);
+    }
+
     const toolCall = mapItemToToolCall(item, "pending");
     if (!toolCall) {
       return;
@@ -509,6 +551,9 @@ export class CodexAcpAgent implements Agent {
       sessionId: session.sessionId,
       update: {
         sessionUpdate: "tool_call",
+        ...(item.type === "commandExecution" && item.processId
+          ? { _meta: { terminal_info: { terminal_id: item.processId } } }
+          : {}),
         ...toolCall,
       },
     });
@@ -524,6 +569,7 @@ export class CodexAcpAgent implements Agent {
     }
 
     if (item.type === "plan") {
+      session.planDeltaByItemId.delete(item.id);
       await this.client.sessionUpdate({
         sessionId: session.sessionId,
         update: {
@@ -543,9 +589,24 @@ export class CodexAcpAgent implements Agent {
       sessionId: session.sessionId,
       update: {
         sessionUpdate: "tool_call_update",
+        ...(item.type === "commandExecution"
+          ? {
+              _meta: {
+                terminal_exit: {
+                  terminal_id: session.terminalProcessByItemId.get(item.id) ?? item.id,
+                  exit_code: item.exitCode ?? 0,
+                  signal: null,
+                },
+              },
+            }
+          : {}),
         ...toolCall,
       },
     });
+
+    if (item.type === "commandExecution") {
+      session.terminalProcessByItemId.delete(item.id);
+    }
   }
 
   private async handleServerRequest(session: SessionState, request: JsonRpcRequest): Promise<unknown> {
@@ -557,7 +618,23 @@ export class CodexAcpAgent implements Agent {
       case "item/permissions/requestApproval":
         return this.handlePermissionsApprovalRequest(session, request.params as any);
       case "item/tool/requestUserInput":
-        return { answers: {} };
+        return this.handleToolRequestUserInput(session, request.params as any);
+      case "item/tool/call":
+        return {
+          success: false,
+          contentItems: [
+            {
+              type: "inputText",
+              text: "Dynamic tool call is not supported by this ACP bridge yet.",
+            },
+          ],
+        };
+      case "mcpServer/elicitation/request":
+        return {
+          action: "decline",
+          content: null,
+          _meta: null,
+        };
       case "account/chatgptAuthTokens/refresh":
         return {};
       default:
@@ -635,5 +712,30 @@ export class CodexAcpAgent implements Agent {
       permissions: {},
       scope: "turn",
     };
+  }
+
+  private async handleToolRequestUserInput(
+    _session: SessionState,
+    params: any,
+  ): Promise<unknown> {
+    const answers: Record<string, { answers: string[] }> = {};
+    const questions = Array.isArray(params?.questions) ? params.questions : [];
+
+    for (const question of questions) {
+      const id = typeof question?.id === "string" ? question.id : undefined;
+      if (!id) {
+        continue;
+      }
+
+      const options = Array.isArray(question?.options) ? question.options : [];
+      if (options.length > 0) {
+        // Best-effort fallback until ACP SDK exposes native request-user-input plumbing.
+        answers[id] = { answers: [String(options[0]?.label ?? "")] };
+      } else {
+        answers[id] = { answers: [] };
+      }
+    }
+
+    return { answers };
   }
 }

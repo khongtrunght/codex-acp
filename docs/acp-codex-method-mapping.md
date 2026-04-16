@@ -1,0 +1,85 @@
+# ACP <-> Codex App Server Method Mapping
+
+Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-RPC methods trong bridge hiện tại.
+
+## Legend
+
+- `[x]` implemented
+- `[ ]` chưa implement / chưa đầy đủ
+- `n/a` không có method tương ứng trực tiếp
+
+## ACP Agent Methods
+
+| ACP method | Codex App Server mapping | Status | Ghi chú |
+|---|---|---|---|
+| `initialize` | `initialize` + `initialized` | [x] | Handshake app-server khi tạo process cho session |
+| `authenticate` | n/a | [x] | Hiện no-op, trả success |
+| `session/new` (`newSession`) | `thread/start` | [x] | Tạo thread mới; có map `mcpServers` -> `config.mcp_servers` |
+| `session/load` (`loadSession`) | `thread/resume` | [x] | Resume theo `sessionId` (thread id) |
+| `session/list` (`listSessions`) | `thread/list` | [x] | Có map `cursor`, `cwd` |
+| `session/prompt` (`prompt`) | `turn/start` | [x] | Chờ `turn/completed` để trả `stopReason` |
+| `session/cancel` (`cancel`) | `turn/interrupt` | [x] | Cần `threadId` + `turnId` đang chạy |
+| `session/set_mode` (`setSessionMode`) | n/a (apply qua tham số turn) | [x] | Lưu local mode, gửi vào `turn/start.approvalPolicy` |
+| `session/set_model` (`unstable_setSessionModel`) | n/a (apply qua tham số turn) | [x] | Lưu local model, gửi vào `turn/start.model` |
+| `session/set_config_option` (`setSessionConfigOption`) | n/a | [x] | Hỗ trợ `mode`, `model` |
+| `session/close` (`unstable_closeSession`) | n/a | [x] | Stop process `codex app-server` của session |
+
+## ACP Client-facing Updates (`session/update`)
+
+| Nguồn Codex notification | ACP update | Status | Ghi chú |
+|---|---|---|---|
+| `item/agentMessage/delta` | `agent_message_chunk` | [x] | Stream text assistant |
+| `item/reasoning/textDelta` | `agent_thought_chunk` | [x] | |
+| `item/reasoning/summaryTextDelta` | `agent_thought_chunk` | [x] | |
+| `item/started` (tool-like items) | `tool_call` | [x] | Map `commandExecution`, `fileChange`, `mcpToolCall`, `dynamicToolCall`, ... |
+| `item/completed` (tool-like items) | `tool_call_update` | [x] | status completed/failed |
+| `item/commandExecution/outputDelta` | `tool_call_update` | [x] | status `in_progress`, `kind=execute` |
+| `item/fileChange/outputDelta` | `tool_call_update` | [x] | status `in_progress`, `kind=edit` |
+| `thread/tokenUsage/updated` | `usage_update` | [x] | map `used` + `size` |
+| `thread/name/updated` | `session_info_update` | [x] | update title |
+| `turn/completed` | `PromptResponse.stopReason` | [x] | resolve waiter prompt |
+| `error` | `agent_message_chunk` + resolve prompt | [x] | hiện fallback message |
+| `item/plan/delta` | `plan` | [x] | stream plan text dạng incremental |
+| `turn/plan/updated` | `plan` | [x] | map full plan state (`pending/inProgress/completed`) |
+| `available_commands_update` | n/a | [ ] | chưa publish slash/commands |
+| `item/commandExecution` lifecycle | `tool_call(_update)` + `_meta.terminal_*` | [x] | `terminal_info`, `terminal_output`, `terminal_exit` |
+
+## Codex Server Requests handled by ACP bridge
+
+| Codex server request | ACP side behavior | Status | Ghi chú |
+|---|---|---|---|
+| `item/commandExecution/requestApproval` | gọi ACP `requestPermission` -> trả `decision` | [x] | Map allow/reject/cancel |
+| `item/fileChange/requestApproval` | gọi ACP `requestPermission` -> trả `decision` | [x] | |
+| `item/permissions/requestApproval` | gọi ACP `requestPermission` -> trả `permissions/scope` | [x] | hiện basic mapping |
+| `item/tool/requestUserInput` | trả `answers` theo options | [x] | hiện fallback chọn option đầu tiên cho mỗi câu |
+| `account/chatgptAuthTokens/refresh` | trả `{}` | [x] | no-op compatibility |
+| `applyPatchApproval` | not handled | [ ] | chưa cần cho flow hiện tại |
+| `execCommandApproval` | not handled | [ ] | chưa cần cho flow hiện tại |
+| `item/tool/call` (dynamic tools) | graceful fallback response | [x] | trả `success:false` + message để tránh gãy turn |
+| `mcpServer/elicitation/request` | graceful fallback response | [x] | trả `decline` mặc định |
+
+## ACP Content -> Codex Input mapping
+
+| ACP content block | Codex `turn/start.input` | Status | Ghi chú |
+|---|---|---|---|
+| `text` | `{ type: "text", text, text_elements: [] }` | [x] | |
+| `resource_link` | text fallback | [x] | Serialize thành text |
+| `resource` (text) | text fallback | [x] | Embed uri + text |
+| `image` (http/https uri) | `{ type: "image", url }` | [x] | |
+| `image` (base64 data) | n/a | [ ] | chưa map sang `localImage` tạm |
+| `audio` | n/a | [ ] | chưa hỗ trợ |
+
+## MCP Servers mapping (ACP -> Codex config)
+
+| ACP MCP transport | Codex config output | Status | Ghi chú |
+|---|---|---|---|
+| `stdio` | `config.mcp_servers.<name> = { command, args, env }` | [x] | |
+| `http` | `config.mcp_servers.<name> = { url, http_headers }` | [x] | |
+| `sse` | ignore | [ ] | Codex config không nhận SSE transport shape ở layer này |
+
+## Gaps ưu tiên tiếp theo
+
+1. Thay fallback `requestUserInput` bằng interactive flow thực sự khi ACP SDK expose API phù hợp.
+2. Nâng `item/tool/call` từ fallback sang thực thi dynamic tool calls thật.
+3. Nâng `mcpServer/elicitation/request` từ decline mặc định sang interactive elicitation.
+4. Publish `available_commands_update` khi có nguồn command list ổn định từ Codex App Server.
