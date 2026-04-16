@@ -50,8 +50,7 @@ Optional environment variable:
 
 ## Current limitations
 
-- ACP `mcpServers` are projected to Codex thread config as `config.mcp_servers` for `stdio` and `http` transports
-- ACP `sse` MCP transport is currently ignored (Codex app-server config does not accept SSE MCP transport shape)
+- ACP `mcpServers` are projected to Codex thread config as `config.mcp_servers` for `stdio`, `http`, and `sse` (best-effort)
 - `item/tool/requestUserInput` uses extension first, then fallback (auto-select first option per question)
 - `session/set_mode` and `session/set_model` update session defaults and apply on subsequent turns
 

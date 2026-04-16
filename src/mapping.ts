@@ -372,7 +372,7 @@ export function buildThreadConfigFromAcpMcpServers(mcpServers: McpServer[]): Rec
       continue;
     }
 
-    if ("type" in server && server.type === "http") {
+    if ("type" in server && (server.type === "http" || server.type === "sse")) {
       const headerMap =
         server.headers.length > 0
           ? Object.fromEntries(
@@ -386,9 +386,6 @@ export function buildThreadConfigFromAcpMcpServers(mcpServers: McpServer[]): Rec
       };
       continue;
     }
-
-    // codex currently doesn't accept SSE transport config.
-    console.error(`[codex-acp] ignoring unsupported MCP SSE server: ${server.name}`);
   }
 
   if (Object.keys(codexMcpServers).length === 0) {

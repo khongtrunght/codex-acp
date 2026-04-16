@@ -77,7 +77,7 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 |---|---|---|---|
 | `stdio` | `config.mcp_servers.<name> = { command, args, env }` | [x] | |
 | `http` | `config.mcp_servers.<name> = { url, http_headers }` | [x] | |
-| `sse` | ignore | [ ] | Codex config không nhận SSE transport shape ở layer này |
+| `sse` | `config.mcp_servers.<name> = { url, http_headers }` | [x] | mapped best-effort sang streamable-http shape |
 
 ## Gaps ưu tiên tiếp theo
 
