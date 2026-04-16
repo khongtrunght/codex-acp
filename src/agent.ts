@@ -54,7 +54,35 @@ import {
 } from "./mapping.ts";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./meta.ts";
 import { CodexAppServerRpc } from "./rpc/codex-app-server-rpc.ts";
-import type { JsonRpcNotification, JsonRpcRequest } from "./types.ts";
+import type {
+  CodexServerNotificationMessage,
+  CodexServerRequestMessage,
+} from "./types.ts";
+import type {
+  AgentMessageDeltaNotification,
+  CommandExecutionOutputDeltaNotification,
+  CommandExecutionRequestApprovalParams,
+  DynamicToolCallParams,
+  ErrorNotification,
+  FileChangeOutputDeltaNotification,
+  FileChangeRequestApprovalParams,
+  ItemCompletedNotification,
+  ItemStartedNotification,
+  McpServerElicitationRequestParams,
+  ModelListResponse,
+  PermissionsRequestApprovalParams,
+  PlanDeltaNotification,
+  ReasoningSummaryTextDeltaNotification,
+  ReasoningTextDeltaNotification,
+  ThreadListResponse,
+  ThreadNameUpdatedNotification,
+  ThreadResumeResponse,
+  ThreadStartResponse,
+  ThreadTokenUsageUpdatedNotification,
+  ToolRequestUserInputParams,
+  TurnCompletedNotification,
+  TurnPlanUpdatedNotification,
+} from "./vendor/codex-types.ts";
 
 type PromptWaiter = {
   turnId: string;
@@ -137,7 +165,7 @@ export class CodexAcpAgent implements Agent {
       persistExtendedHistory: DEFAULT_PERSIST_EXTENDED_HISTORY,
       model: modelState.currentModelId,
       ...(threadConfig ? { config: threadConfig } : {}),
-    })) as any;
+    })) as ThreadStartResponse;
 
     const currentModeId = mapApprovalPolicyToModeId(startResponse.approvalPolicy);
     const modes = buildModeState(currentModeId);
@@ -183,7 +211,7 @@ export class CodexAcpAgent implements Agent {
       persistExtendedHistory: true,
       model: modelState.currentModelId,
       ...(threadConfig ? { config: threadConfig } : {}),
-    })) as any;
+    })) as ThreadResumeResponse;
 
     const currentModeId = mapApprovalPolicyToModeId(resumeResponse.approvalPolicy);
     const modes = buildModeState(currentModeId);
@@ -226,9 +254,9 @@ export class CodexAcpAgent implements Agent {
       const response = (await rpc.request("thread/list", {
         cursor: params.cursor ?? null,
         cwd: params.cwd ?? null,
-      })) as any;
+      })) as ThreadListResponse;
 
-      const sessions: SessionInfo[] = (response.data ?? []).map((thread: any) => ({
+      const sessions: SessionInfo[] = (response.data ?? []).map((thread) => ({
         sessionId: thread.id,
         cwd: thread.cwd,
         title: thread.name ?? toSessionTitle(thread.preview),
@@ -251,14 +279,14 @@ export class CodexAcpAgent implements Agent {
       throw RequestError.invalidParams(undefined, "A turn is already running for this session.");
     }
 
-    const input = promptToCodexInput(params);
+    const input = await promptToCodexInput(params);
 
     const response = (await session.rpc.request("turn/start", {
       threadId: session.threadId,
       input,
       model: session.currentModelId,
       approvalPolicy: mapModeIdToApprovalPolicy(session.currentModeId),
-    })) as any;
+    })) as { turn: { id: string } };
 
     const turnId: string = response.turn.id;
 
@@ -358,13 +386,13 @@ export class CodexAcpAgent implements Agent {
   }
 
   private async loadModelState(rpc: CodexAppServerRpc): Promise<SessionModelState> {
-    const response = (await rpc.request("model/list", {})) as any;
-    const models = (response.data ?? []) as any[];
+    const response = (await rpc.request("model/list", {})) as ModelListResponse;
+    const models = response.data ?? [];
     if (models.length === 0) {
       throw new Error("No models returned from codex app-server");
     }
 
-    const defaultModel = models.find((model) => model.isDefault) ?? models[0];
+    const defaultModel = models.find((model) => model.isDefault) ?? models[0]!;
 
     return {
       currentModelId: defaultModel.id,
@@ -384,12 +412,11 @@ export class CodexAcpAgent implements Agent {
     return session;
   }
 
-  private async handleNotification(session: SessionState, notification: JsonRpcNotification): Promise<void> {
-    const { method, params } = notification;
-    const p = (params ?? {}) as any;
-
-    switch (method) {
+  private async handleNotification(session: SessionState, notification: CodexServerNotificationMessage): Promise<void> {
+    switch (notification.method) {
       case "item/agentMessage/delta":
+        {
+          const p = notification.params as AgentMessageDeltaNotification;
         await this.client.sessionUpdate({
           sessionId: session.sessionId,
           update: {
@@ -398,8 +425,22 @@ export class CodexAcpAgent implements Agent {
           },
         });
         return;
+        }
       case "item/reasoning/textDelta":
+        {
+          const p = notification.params as ReasoningTextDeltaNotification;
+          await this.client.sessionUpdate({
+            sessionId: session.sessionId,
+            update: {
+              sessionUpdate: "agent_thought_chunk",
+              content: { type: "text", text: p.delta ?? "" },
+            },
+          });
+          return;
+        }
       case "item/reasoning/summaryTextDelta":
+        {
+          const p = notification.params as ReasoningSummaryTextDeltaNotification;
         await this.client.sessionUpdate({
           sessionId: session.sessionId,
           update: {
@@ -408,10 +449,15 @@ export class CodexAcpAgent implements Agent {
           },
         });
         return;
+        }
       case "item/started":
-        await this.handleItemStarted(session, p.item);
+        {
+          const p = notification.params as ItemStartedNotification;
+          await this.handleItemStarted(session, p.item);
         return;
+        }
       case "item/plan/delta": {
+        const p = notification.params as PlanDeltaNotification;
         const previous = session.planDeltaByItemId.get(p.itemId) ?? "";
         const next = previous + (p.delta ?? "");
         session.planDeltaByItemId.set(p.itemId, next);
@@ -425,6 +471,8 @@ export class CodexAcpAgent implements Agent {
         return;
       }
       case "item/commandExecution/outputDelta":
+        {
+          const p = notification.params as CommandExecutionOutputDeltaNotification;
         await this.client.sessionUpdate({
           sessionId: session.sessionId,
           update: {
@@ -442,7 +490,10 @@ export class CodexAcpAgent implements Agent {
           },
         });
         return;
+        }
       case "item/fileChange/outputDelta":
+        {
+          const p = notification.params as FileChangeOutputDeltaNotification;
         await this.client.sessionUpdate({
           sessionId: session.sessionId,
           update: {
@@ -454,10 +505,15 @@ export class CodexAcpAgent implements Agent {
           },
         });
         return;
+        }
       case "item/completed":
-        await this.handleItemCompleted(session, p.item);
+        {
+          const p = notification.params as ItemCompletedNotification;
+          await this.handleItemCompleted(session, p.item);
         return;
+        }
       case "thread/tokenUsage/updated": {
+        const p = notification.params as ThreadTokenUsageUpdatedNotification;
         const usage = p.tokenUsage?.last ?? p.tokenUsage?.total;
         if (!usage) {
           return;
@@ -473,15 +529,20 @@ export class CodexAcpAgent implements Agent {
         return;
       }
       case "thread/name/updated":
+        {
+        const p = notification.params as ThreadNameUpdatedNotification;
         await this.client.sessionUpdate({
           sessionId: session.sessionId,
           update: {
             sessionUpdate: "session_info_update",
-            title: p.name ?? null,
+            title: p.threadName ?? null,
           },
         });
         return;
+        }
       case "turn/plan/updated":
+        {
+        const p = notification.params as TurnPlanUpdatedNotification;
         await this.client.sessionUpdate({
           sessionId: session.sessionId,
           update: {
@@ -494,7 +555,10 @@ export class CodexAcpAgent implements Agent {
           },
         });
         return;
+        }
       case "turn/completed":
+        {
+        const p = notification.params as TurnCompletedNotification;
         if (session.promptWaiter && session.promptWaiter.turnId === p.turn?.id) {
           const status = p.turn?.status;
           const reason: StopReason =
@@ -502,7 +566,10 @@ export class CodexAcpAgent implements Agent {
           session.promptWaiter.resolve(reason);
         }
         return;
+        }
       case "error":
+        {
+        const p = notification.params as ErrorNotification;
         if (session.promptWaiter && session.promptWaiter.turnId === p.turnId) {
           session.promptWaiter.resolve("end_turn");
         }
@@ -517,6 +584,7 @@ export class CodexAcpAgent implements Agent {
           },
         });
         return;
+        }
       default:
         return;
     }
@@ -609,17 +677,33 @@ export class CodexAcpAgent implements Agent {
     }
   }
 
-  private async handleServerRequest(session: SessionState, request: JsonRpcRequest): Promise<unknown> {
+  private async handleServerRequest(session: SessionState, request: CodexServerRequestMessage): Promise<unknown> {
     switch (request.method) {
       case "item/commandExecution/requestApproval":
-        return this.handleApprovalRequest(session, request.params as any, "command");
+        return this.handleApprovalRequest(
+          session,
+          request.params as CommandExecutionRequestApprovalParams,
+          "command",
+        );
       case "item/fileChange/requestApproval":
-        return this.handleApprovalRequest(session, request.params as any, "file");
+        return this.handleApprovalRequest(
+          session,
+          request.params as FileChangeRequestApprovalParams,
+          "file",
+        );
       case "item/permissions/requestApproval":
-        return this.handlePermissionsApprovalRequest(session, request.params as any);
+        return this.handlePermissionsApprovalRequest(
+          session,
+          request.params as PermissionsRequestApprovalParams,
+        );
       case "item/tool/requestUserInput":
-        return this.handleToolRequestUserInput(session, request.params as any);
+        return this.handleToolRequestUserInput(
+          session,
+          request.params as ToolRequestUserInputParams,
+        );
       case "item/tool/call":
+        {
+          const _params = request.params as DynamicToolCallParams;
         return {
           success: false,
           contentItems: [
@@ -629,12 +713,16 @@ export class CodexAcpAgent implements Agent {
             },
           ],
         };
+        }
       case "mcpServer/elicitation/request":
+        {
+          const _params = request.params as McpServerElicitationRequestParams;
         return {
           action: "decline",
           content: null,
           _meta: null,
         };
+        }
       case "account/chatgptAuthTokens/refresh":
         return {};
       default:

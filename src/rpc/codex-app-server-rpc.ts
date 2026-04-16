@@ -4,8 +4,9 @@ import type { Readable, Writable } from "node:stream";
 import { CODEX_BIN } from "../constants.ts";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "../meta.ts";
 import type {
-  JsonRpcNotification,
-  JsonRpcRequest,
+  CodexClientRequestMessage,
+  CodexServerNotificationMessage,
+  CodexServerRequestMessage,
   JsonRpcResponse,
   NotificationHandler,
   ServerRequestHandler,
@@ -132,7 +133,10 @@ export class CodexAppServerRpc {
   }
 
   private async handleLine(line: string): Promise<void> {
-    const parsed = JSON.parse(line) as JsonRpcRequest | JsonRpcNotification | JsonRpcResponse;
+    const parsed = JSON.parse(line) as
+      | CodexServerRequestMessage
+      | CodexServerNotificationMessage
+      | JsonRpcResponse;
 
     if (typeof parsed === "object" && parsed !== null && "id" in parsed && ("result" in parsed || "error" in parsed)) {
       const id = parsed.id;
@@ -154,7 +158,7 @@ export class CodexAppServerRpc {
     }
 
     if (typeof parsed === "object" && parsed !== null && "method" in parsed && "id" in parsed) {
-      const request = parsed as JsonRpcRequest;
+      const request = parsed as CodexServerRequestMessage;
       if (!this.serverRequestHandler) {
         this.send({
           jsonrpc: "2.0",
@@ -185,7 +189,7 @@ export class CodexAppServerRpc {
 
     if (typeof parsed === "object" && parsed !== null && "method" in parsed) {
       if (this.notificationHandler) {
-        await this.notificationHandler(parsed as JsonRpcNotification);
+        await this.notificationHandler(parsed as CodexServerNotificationMessage);
       }
     }
   }

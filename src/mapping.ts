@@ -7,6 +7,9 @@ import type {
   SessionModeState,
   SessionModelState,
 } from "@agentclientprotocol/sdk";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 
 export function buildPermissionOptions(
   kind: "command" | "file",
@@ -49,7 +52,7 @@ export function buildPermissionOptions(
   return options;
 }
 
-export function promptToCodexInput(prompt: PromptRequest): any[] {
+export async function promptToCodexInput(prompt: PromptRequest): Promise<any[]> {
   const input: any[] = [];
 
   for (const block of prompt.prompt) {
@@ -79,6 +82,15 @@ export function promptToCodexInput(prompt: PromptRequest): any[] {
     if (block.type === "image") {
       if (block.uri && /^https?:\/\//.test(block.uri)) {
         input.push({ type: "image", url: block.uri });
+      } else if (block.uri && /^data:image\//i.test(block.uri)) {
+        const parsed = parseDataImageUri(block.uri);
+        if (parsed) {
+          const localPath = await writePromptImageToTempFile(parsed.base64Data, parsed.mimeType);
+          input.push({ type: "localImage", path: localPath });
+        }
+      } else if (block.data && block.mimeType) {
+        const localPath = await writePromptImageToTempFile(block.data, block.mimeType);
+        input.push({ type: "localImage", path: localPath });
       }
       continue;
     }
@@ -89,6 +101,40 @@ export function promptToCodexInput(prompt: PromptRequest): any[] {
   }
 
   return input;
+}
+
+async function writePromptImageToTempFile(base64Data: string, mimeType: string): Promise<string> {
+  const extension = mimeTypeToExtension(mimeType);
+  const dir = path.join(os.tmpdir(), "codex-acp-bridge-images");
+  await fs.mkdir(dir, { recursive: true });
+  const filePath = path.join(
+    dir,
+    `prompt-image-${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`,
+  );
+  await fs.writeFile(filePath, Buffer.from(base64Data, "base64"));
+  return filePath;
+}
+
+function mimeTypeToExtension(mimeType: string): string {
+  const normalized = mimeType.toLowerCase();
+  if (normalized === "image/png") return "png";
+  if (normalized === "image/jpeg" || normalized === "image/jpg") return "jpg";
+  if (normalized === "image/webp") return "webp";
+  if (normalized === "image/gif") return "gif";
+  return "bin";
+}
+
+function parseDataImageUri(uri: string): { mimeType: string; base64Data: string } | null {
+  const match = uri.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
+  const mimeType = match?.[1];
+  const base64Data = match?.[2];
+  if (!mimeType || !base64Data) {
+    return null;
+  }
+  return {
+    mimeType,
+    base64Data,
+  };
 }
 
 export function toolStatusFromItem(item: any): "completed" | "failed" {

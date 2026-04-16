@@ -66,7 +66,7 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 | `resource_link` | text fallback | [x] | Serialize thành text |
 | `resource` (text) | text fallback | [x] | Embed uri + text |
 | `image` (http/https uri) | `{ type: "image", url }` | [x] | |
-| `image` (base64 data) | n/a | [ ] | chưa map sang `localImage` tạm |
+| `image` (base64 data) | `{ type: "localImage", path }` | [x] | ghi file tạm rồi gửi local image |
 | `audio` | n/a | [ ] | chưa hỗ trợ |
 
 ## MCP Servers mapping (ACP -> Codex config)

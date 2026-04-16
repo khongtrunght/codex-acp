@@ -58,3 +58,16 @@ bun run typecheck
 ```
 
 Implementation is modularized under `src/` (`agent`, `rpc`, `mapping`, `main`), with `src/index.ts` as the executable entrypoint (same style as `mission-agent-acp`).
+
+## Codex Protocol Types
+
+Bridge này vendor schema types từ `openai/codex` vào:
+
+- `src/vendor/codex-app-server-protocol/`
+- metadata nguồn: `src/vendor/codex-schema-source.md`
+
+Sync types từ upstream:
+
+```bash
+scripts/sync-codex-schema-types.sh
+```
