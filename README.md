@@ -18,6 +18,7 @@ TypeScript ACP adapter that bridges ACP clients to `codex app-server` over JSON-
   - `tool_call` / `tool_call_update`
   - `plan`
   - `usage_update`
+  - `available_commands_update` (static command set at session bootstrap)
 - Bridges Codex approval server-requests to ACP `requestPermission`
 - Exposes model and mode config through ACP session config options
 

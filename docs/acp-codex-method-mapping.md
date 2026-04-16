@@ -41,7 +41,7 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 | `error` | `agent_message_chunk` + resolve prompt | [x] | hiện fallback message |
 | `item/plan/delta` | `plan` | [x] | stream plan text dạng incremental |
 | `turn/plan/updated` | `plan` | [x] | map full plan state (`pending/inProgress/completed`) |
-| `available_commands_update` | n/a | [ ] | chưa publish slash/commands |
+| session bootstrap | `available_commands_update` | [x] | publish static command set khi `newSession`/`loadSession` |
 | `item/commandExecution` lifecycle | `tool_call(_update)` + `_meta.terminal_*` | [x] | `terminal_info`, `terminal_output`, `terminal_exit` |
 
 ## Codex Server Requests handled by ACP bridge
@@ -80,5 +80,5 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 ## Gaps ưu tiên tiếp theo
 
 1. Chuẩn hóa extension contract (`codex/request_user_input`, `codex/dynamic_tool_call`, `codex/mcp_eliicitation_request`) để client implement đồng nhất.
-2. Publish `available_commands_update` khi có nguồn command list ổn định từ Codex App Server.
+2. Thay static command set bằng nguồn dynamic khi Codex App Server expose command list chính thức.
 3. Bổ sung audio content mapping (nếu Codex protocol mở input audio cho `turn/start`).

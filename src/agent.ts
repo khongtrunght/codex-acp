@@ -20,6 +20,7 @@ import type {
   PromptResponse,
   RequestPermissionRequest,
   RequestPermissionResponse,
+  AvailableCommand,
   SessionConfigOption,
   SessionInfo,
   SessionModeState,
@@ -112,6 +113,14 @@ export class CodexAcpAgent implements Agent {
   private readonly client: AgentSideConnection;
   private closed = false;
   private lifecycleHooksInstalled = false;
+  private static readonly STATIC_AVAILABLE_COMMANDS: AvailableCommand[] = [
+    { name: "review", description: "Run code review in current thread." },
+    { name: "review-branch", description: "Review current git branch." },
+    { name: "review-commit", description: "Review a specific commit." },
+    { name: "init", description: "Initialize project scaffold/instructions." },
+    { name: "compact", description: "Compact conversation context." },
+    { name: "logout", description: "Logout current account/session." },
+  ];
 
   constructor(client: AgentSideConnection) {
     this.client = client;
@@ -206,6 +215,7 @@ export class CodexAcpAgent implements Agent {
     rpc.setServerRequestHandler((request) => this.handleServerRequest(session, request));
 
     this.sessions.set(sessionId, session);
+    await this.sendAvailableCommandsUpdate(sessionId);
 
     return {
       sessionId,
@@ -252,6 +262,7 @@ export class CodexAcpAgent implements Agent {
     rpc.setServerRequestHandler((request) => this.handleServerRequest(session, request));
 
     this.sessions.set(params.sessionId, session);
+    await this.sendAvailableCommandsUpdate(params.sessionId);
 
     await replayThreadHistory(this.client, session.sessionId, resumeResponse.thread);
 
@@ -433,6 +444,16 @@ export class CodexAcpAgent implements Agent {
       throw RequestError.resourceNotFound(sessionId);
     }
     return session;
+  }
+
+  private async sendAvailableCommandsUpdate(sessionId: string): Promise<void> {
+    await this.client.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: CodexAcpAgent.STATIC_AVAILABLE_COMMANDS,
+      },
+    });
   }
 
   private async closeAllSessions(): Promise<void> {
