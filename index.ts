@@ -632,6 +632,30 @@ class CodexAcpAgent implements Agent {
       case "item/started":
         await this.handleItemStarted(session, p.item);
         return;
+      case "item/commandExecution/outputDelta":
+        await this.client.sessionUpdate({
+          sessionId: session.sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: p.itemId,
+            status: "in_progress",
+            kind: "execute",
+            rawOutput: p.delta ?? "",
+          },
+        });
+        return;
+      case "item/fileChange/outputDelta":
+        await this.client.sessionUpdate({
+          sessionId: session.sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: p.itemId,
+            status: "in_progress",
+            kind: "edit",
+            rawOutput: p.delta ?? "",
+          },
+        });
+        return;
       case "item/completed":
         await this.handleItemCompleted(session, p.item);
         return;
