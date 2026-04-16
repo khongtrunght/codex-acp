@@ -48,13 +48,20 @@ Optional environment variable:
 
 - ACP `mcpServers` are projected to Codex thread config as `config.mcp_servers` for `stdio` and `http` transports
 - ACP `sse` MCP transport is currently ignored (Codex app-server config does not accept SSE MCP transport shape)
-- `item/tool/requestUserInput` currently uses fallback (auto-select first option per question), chưa interactive thật
+- `item/tool/requestUserInput` uses extension first, then fallback (auto-select first option per question)
 - `session/set_mode` and `session/set_model` update session defaults and apply on subsequent turns
+
+Optional extension hooks for richer behavior (if ACP client implements them):
+
+- `codex/request_user_input`
+- `codex/dynamic_tool_call`
+- `codex/mcp_eliicitation_request`
 
 ## Quick sanity test
 
 ```bash
 bun run typecheck
+bun run test
 ```
 
 Implementation is modularized under `src/` (`agent`, `rpc`, `mapping`, `main`), with `src/index.ts` as the executable entrypoint (same style as `mission-agent-acp`).

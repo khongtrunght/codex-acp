@@ -29,3 +29,5 @@ export type { PermissionsRequestApprovalParams } from "./codex-app-server-protoc
 export type { ToolRequestUserInputParams } from "./codex-app-server-protocol/v2/ToolRequestUserInputParams.ts";
 export type { DynamicToolCallParams } from "./codex-app-server-protocol/v2/DynamicToolCallParams.ts";
 export type { McpServerElicitationRequestParams } from "./codex-app-server-protocol/v2/McpServerElicitationRequestParams.ts";
+export type { ExecCommandApprovalParams } from "./codex-app-server-protocol/ExecCommandApprovalParams.ts";
+export type { ApplyPatchApprovalParams } from "./codex-app-server-protocol/ApplyPatchApprovalParams.ts";

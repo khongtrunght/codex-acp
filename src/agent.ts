@@ -60,10 +60,12 @@ import type {
 } from "./types.ts";
 import type {
   AgentMessageDeltaNotification,
+  ApplyPatchApprovalParams,
   CommandExecutionOutputDeltaNotification,
   CommandExecutionRequestApprovalParams,
   DynamicToolCallParams,
   ErrorNotification,
+  ExecCommandApprovalParams,
   FileChangeOutputDeltaNotification,
   FileChangeRequestApprovalParams,
   ItemCompletedNotification,
@@ -108,12 +110,16 @@ type SessionState = {
 export class CodexAcpAgent implements Agent {
   private readonly sessions = new Map<string, SessionState>();
   private readonly client: AgentSideConnection;
+  private closed = false;
+  private lifecycleHooksInstalled = false;
 
   constructor(client: AgentSideConnection) {
     this.client = client;
   }
 
   async initialize(_request: InitializeRequest): Promise<InitializeResponse> {
+    this.installLifecycleHooks();
+
     return {
       protocolVersion: 1,
       agentInfo: {
@@ -144,6 +150,16 @@ export class CodexAcpAgent implements Agent {
         },
       ],
     };
+  }
+
+  private installLifecycleHooks(): void {
+    if (this.lifecycleHooksInstalled) {
+      return;
+    }
+    this.lifecycleHooksInstalled = true;
+    this.client.signal.addEventListener("abort", () => {
+      void this.closeAllSessions();
+    });
   }
 
   async authenticate(_params: AuthenticateRequest): Promise<void> {
@@ -320,6 +336,10 @@ export class CodexAcpAgent implements Agent {
     }
 
     this.sessions.delete(params.sessionId);
+    if (session.promptWaiter) {
+      session.promptWaiter.resolve("cancelled");
+      session.promptWaiter = null;
+    }
     await session.rpc.stop();
     return {};
   }
@@ -405,11 +425,34 @@ export class CodexAcpAgent implements Agent {
   }
 
   private requireSession(sessionId: string): SessionState {
+    if (this.closed) {
+      throw RequestError.internalError(undefined, "ACP connection already closed.");
+    }
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw RequestError.resourceNotFound(sessionId);
     }
     return session;
+  }
+
+  private async closeAllSessions(): Promise<void> {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+
+    const sessions = Array.from(this.sessions.values());
+    this.sessions.clear();
+
+    await Promise.all(
+      sessions.map(async (session) => {
+        if (session.promptWaiter) {
+          session.promptWaiter.resolve("cancelled");
+          session.promptWaiter = null;
+        }
+        await session.rpc.stop();
+      }),
+    );
   }
 
   private async handleNotification(session: SessionState, notification: CodexServerNotificationMessage): Promise<void> {
@@ -703,30 +746,51 @@ export class CodexAcpAgent implements Agent {
         );
       case "item/tool/call":
         {
-          const _params = request.params as DynamicToolCallParams;
-        return {
-          success: false,
-          contentItems: [
-            {
-              type: "inputText",
-              text: "Dynamic tool call is not supported by this ACP bridge yet.",
-            },
-          ],
-        };
+          const params = request.params as DynamicToolCallParams;
+          const extResponse = await this.tryExtMethod("codex/dynamic_tool_call", params as Record<string, unknown>);
+          if (extResponse && this.isDynamicToolCallResponse(extResponse)) {
+            return extResponse;
+          }
+          return {
+            success: false,
+            contentItems: [
+              {
+                type: "inputText",
+                text: "Dynamic tool call is not supported by this ACP bridge yet.",
+              },
+            ],
+          };
         }
       case "mcpServer/elicitation/request":
         {
-          const _params = request.params as McpServerElicitationRequestParams;
-        return {
-          action: "decline",
-          content: null,
-          _meta: null,
-        };
+          const params = request.params as McpServerElicitationRequestParams;
+          const extResponse = await this.tryExtMethod(
+            "codex/mcp_eliicitation_request",
+            params as Record<string, unknown>,
+          );
+          if (extResponse && this.isMcpElicitationResponse(extResponse)) {
+            return extResponse;
+          }
+          return {
+            action: "decline",
+            content: null,
+            _meta: null,
+          };
         }
+      case "execCommandApproval":
+        return this.handleLegacyExecCommandApproval(
+          session,
+          request.params as ExecCommandApprovalParams,
+        );
+      case "applyPatchApproval":
+        return this.handleLegacyApplyPatchApproval(
+          session,
+          request.params as ApplyPatchApprovalParams,
+        );
       case "account/chatgptAuthTokens/refresh":
         return {};
       default:
-        throw new Error(`Unsupported server request from codex app-server: ${request.method}`);
+        throw new Error("Unsupported server request from codex app-server");
     }
   }
 
@@ -804,8 +868,16 @@ export class CodexAcpAgent implements Agent {
 
   private async handleToolRequestUserInput(
     _session: SessionState,
-    params: any,
+    params: ToolRequestUserInputParams,
   ): Promise<unknown> {
+    const extResponse = await this.tryExtMethod(
+      "codex/request_user_input",
+      params as unknown as Record<string, unknown>,
+    );
+    if (extResponse && this.isToolRequestUserInputResponse(extResponse)) {
+      return extResponse;
+    }
+
     const answers: Record<string, { answers: string[] }> = {};
     const questions = Array.isArray(params?.questions) ? params.questions : [];
 
@@ -825,5 +897,109 @@ export class CodexAcpAgent implements Agent {
     }
 
     return { answers };
+  }
+
+  private async tryExtMethod(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      return await this.client.extMethod(method, params);
+    } catch {
+      return null;
+    }
+  }
+
+  private isToolRequestUserInputResponse(
+    value: Record<string, unknown>,
+  ): value is { answers: Record<string, { answers: string[] }> } {
+    return typeof value.answers === "object" && value.answers !== null;
+  }
+
+  private isDynamicToolCallResponse(
+    value: Record<string, unknown>,
+  ): value is { success: boolean; contentItems: Array<{ type: string; text?: string; imageUrl?: string }> } {
+    return typeof value.success === "boolean" && Array.isArray(value.contentItems);
+  }
+
+  private isMcpElicitationResponse(
+    value: Record<string, unknown>,
+  ): value is { action: "accept" | "decline" | "cancel"; content: unknown; _meta: unknown } {
+    return (
+      (value.action === "accept" || value.action === "decline" || value.action === "cancel") &&
+      "content" in value &&
+      "_meta" in value
+    );
+  }
+
+  private async handleLegacyExecCommandApproval(
+    session: SessionState,
+    params: ExecCommandApprovalParams,
+  ): Promise<unknown> {
+    const options: RequestPermissionRequest["options"] = [
+      { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
+      { optionId: "allow_always", name: "Allow for session", kind: "allow_always" },
+      { optionId: "reject_once", name: "Reject", kind: "reject_once" },
+    ];
+    const response = await this.client.requestPermission({
+      sessionId: session.sessionId,
+      options,
+      toolCall: {
+        toolCallId: params.callId,
+        title: params.command.join(" "),
+        rawInput: {
+          cwd: params.cwd,
+          reason: params.reason,
+        },
+      },
+    });
+
+    if (response.outcome.outcome !== "selected") {
+      return { decision: "abort" };
+    }
+
+    if (response.outcome.optionId === "allow_once") {
+      return { decision: "approved" };
+    }
+    if (response.outcome.optionId === "allow_always") {
+      return { decision: "approved_for_session" };
+    }
+    return { decision: "denied" };
+  }
+
+  private async handleLegacyApplyPatchApproval(
+    session: SessionState,
+    params: ApplyPatchApprovalParams,
+  ): Promise<unknown> {
+    const options: RequestPermissionRequest["options"] = [
+      { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
+      { optionId: "allow_always", name: "Allow for session", kind: "allow_always" },
+      { optionId: "reject_once", name: "Reject", kind: "reject_once" },
+    ];
+    const response = await this.client.requestPermission({
+      sessionId: session.sessionId,
+      options,
+      toolCall: {
+        toolCallId: params.callId,
+        title: "Apply patch",
+        rawInput: {
+          reason: params.reason,
+          grantRoot: params.grantRoot,
+          fileChanges: params.fileChanges,
+        },
+      },
+    });
+
+    if (response.outcome.outcome !== "selected") {
+      return { decision: "abort" };
+    }
+
+    if (response.outcome.optionId === "allow_once") {
+      return { decision: "approved" };
+    }
+    if (response.outcome.optionId === "allow_always") {
+      return { decision: "approved_for_session" };
+    }
+    return { decision: "denied" };
   }
 }

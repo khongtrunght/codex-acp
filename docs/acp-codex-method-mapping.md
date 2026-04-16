@@ -51,12 +51,12 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 | `item/commandExecution/requestApproval` | gọi ACP `requestPermission` -> trả `decision` | [x] | Map allow/reject/cancel |
 | `item/fileChange/requestApproval` | gọi ACP `requestPermission` -> trả `decision` | [x] | |
 | `item/permissions/requestApproval` | gọi ACP `requestPermission` -> trả `permissions/scope` | [x] | hiện basic mapping |
-| `item/tool/requestUserInput` | trả `answers` theo options | [x] | hiện fallback chọn option đầu tiên cho mỗi câu |
+| `item/tool/requestUserInput` | ext-method -> fallback answers | [x] | thử `codex/request_user_input`, fallback chọn option đầu tiên |
 | `account/chatgptAuthTokens/refresh` | trả `{}` | [x] | no-op compatibility |
-| `applyPatchApproval` | not handled | [ ] | chưa cần cho flow hiện tại |
-| `execCommandApproval` | not handled | [ ] | chưa cần cho flow hiện tại |
-| `item/tool/call` (dynamic tools) | graceful fallback response | [x] | trả `success:false` + message để tránh gãy turn |
-| `mcpServer/elicitation/request` | graceful fallback response | [x] | trả `decline` mặc định |
+| `applyPatchApproval` | gọi ACP `requestPermission` -> trả `decision` | [x] | hỗ trợ legacy approval flow |
+| `execCommandApproval` | gọi ACP `requestPermission` -> trả `decision` | [x] | hỗ trợ legacy approval flow |
+| `item/tool/call` (dynamic tools) | ext-method -> graceful fallback | [x] | thử `codex/dynamic_tool_call`, nếu không có thì `success:false` |
+| `mcpServer/elicitation/request` | ext-method -> graceful fallback | [x] | thử `codex/mcp_eliicitation_request`, nếu không có thì `decline` |
 
 ## ACP Content -> Codex Input mapping
 
@@ -79,7 +79,6 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 
 ## Gaps ưu tiên tiếp theo
 
-1. Thay fallback `requestUserInput` bằng interactive flow thực sự khi ACP SDK expose API phù hợp.
-2. Nâng `item/tool/call` từ fallback sang thực thi dynamic tool calls thật.
-3. Nâng `mcpServer/elicitation/request` từ decline mặc định sang interactive elicitation.
-4. Publish `available_commands_update` khi có nguồn command list ổn định từ Codex App Server.
+1. Chuẩn hóa extension contract (`codex/request_user_input`, `codex/dynamic_tool_call`, `codex/mcp_eliicitation_request`) để client implement đồng nhất.
+2. Publish `available_commands_update` khi có nguồn command list ổn định từ Codex App Server.
+3. Bổ sung audio content mapping (nếu Codex protocol mở input audio cho `turn/start`).
