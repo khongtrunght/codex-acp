@@ -94,6 +94,18 @@ export async function promptToCodexInput(prompt: PromptRequest): Promise<any[]> 
       }
       continue;
     }
+
+    if (block.type === "audio") {
+      input.push({
+        type: "text",
+        text:
+          block.mimeType && block.data
+            ? `[Audio input received: ${block.mimeType}, ${block.data.length} base64 chars]`
+            : "[Audio input received]",
+        text_elements: [],
+      });
+      continue;
+    }
   }
 
   if (input.length === 0) {

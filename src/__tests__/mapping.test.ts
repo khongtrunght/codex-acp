@@ -24,3 +24,14 @@ test("maps data URI image (non-standard) to localImage input", async () => {
   expect(out[0]?.type).toBe("localImage");
   expect(typeof out[0]?.path).toBe("string");
 });
+
+test("maps audio input to descriptive text fallback", async () => {
+  const out = await promptToCodexInput({
+    sessionId: "s",
+    prompt: [{ type: "audio", data: "aGVsbG8=", mimeType: "audio/wav" }],
+  } as any);
+
+  expect(out).toHaveLength(1);
+  expect(out[0]?.type).toBe("text");
+  expect(String(out[0]?.text)).toContain("Audio input received");
+});

@@ -67,7 +67,7 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 | `resource` (text) | text fallback | [x] | Embed uri + text |
 | `image` (http/https uri) | `{ type: "image", url }` | [x] | |
 | `image` (base64 data) | `{ type: "localImage", path }` | [x] | ghi file tạm rồi gửi local image |
-| `audio` | n/a | [ ] | chưa hỗ trợ |
+| `audio` | text fallback | [x] | convert thành descriptive text note |
 
 ## MCP Servers mapping (ACP -> Codex config)
 
@@ -81,4 +81,4 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 
 1. Chuẩn hóa extension contract (`codex/request_user_input`, `codex/dynamic_tool_call`, `codex/mcp_eliicitation_request`) để client implement đồng nhất.
 2. Thay static command set bằng nguồn dynamic khi Codex App Server expose command list chính thức.
-3. Bổ sung audio content mapping (nếu Codex protocol mở input audio cho `turn/start`).
+3. Nâng audio từ text fallback sang native mapping nếu Codex mở input audio cho `turn/start`.

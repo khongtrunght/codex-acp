@@ -58,3 +58,24 @@ test("legacy approvals map cancelled to abort", async () => {
   });
   expect(res.decision).toBe("abort");
 });
+
+test("requestUserInput uses extension result when available", async () => {
+  const controller = new AbortController();
+  const fakeClient: any = {
+    requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+    sessionUpdate: async () => {},
+    signal: controller.signal,
+    extMethod: async (method: string) => {
+      if (method === "codex/request_user_input") {
+        return { answers: { q1: { answers: ["from-ext"] } } };
+      }
+      throw new Error("unsupported");
+    },
+  };
+  const agent = new CodexAcpAgent(fakeClient as any) as any;
+  const res = await agent.handleToolRequestUserInput(
+    { sessionId: "s" },
+    { questions: [{ id: "q1", options: [{ label: "opt1", description: "" }] }] },
+  );
+  expect(res.answers.q1.answers[0]).toBe("from-ext");
+});
