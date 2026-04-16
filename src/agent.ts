@@ -325,6 +325,7 @@ export class CodexAcpAgent implements Agent {
 
     return {
       stopReason,
+      ...(params.messageId ? { userMessageId: params.messageId } : {}),
     };
   }
 
