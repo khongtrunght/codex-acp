@@ -30,7 +30,7 @@ bun install
 ## Run
 
 ```bash
-bun run index.ts
+bun run src/index.ts
 ```
 
 Or as a bin:
@@ -57,4 +57,4 @@ Optional environment variable:
 bun run typecheck
 ```
 
-The implementation is in `index.ts` for fast iteration; split into modules when the bridge surface grows.
+Implementation is modularized under `src/` (`agent`, `rpc`, `mapping`, `main`), with `src/index.ts` as the executable entrypoint (same style as `mission-agent-acp`).

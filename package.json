@@ -1,15 +1,15 @@
 {
   "name": "codex-acp-bridge",
   "version": "0.1.0",
-  "module": "index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
   "bin": {
-    "codex-acp-bridge": "index.ts"
+    "codex-acp-bridge": "src/index.ts"
   },
   "scripts": {
-    "dev": "bun run index.ts",
-    "start": "bun run index.ts",
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
