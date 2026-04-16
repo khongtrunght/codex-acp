@@ -1,9 +1,17 @@
 import { expect, test } from "bun:test";
 import { CodexAcpAgent } from "../agent.ts";
 
-function buildAgent(optionId: string | null) {
+type TestAgent = {
+  enableExtensionMethods: boolean;
+  handleLegacyExecCommandApproval: (session: { sessionId: string }, params: unknown) => Promise<{ decision: string }>;
+  handleLegacyApplyPatchApproval: (session: { sessionId: string }, params: unknown) => Promise<{ decision: string }>;
+  handleToolRequestUserInput: (session: { sessionId: string }, params: unknown) => Promise<{ answers: Record<string, { answers: string[] }> }>;
+  resolveAvailableCommands: () => Promise<Array<{ name: string; description: string }>>;
+};
+
+function buildAgent(optionId: string | null): TestAgent {
   const controller = new AbortController();
-  const fakeClient: any = {
+  const fakeClient = {
     requestPermission: async () => {
       if (!optionId) {
         return { outcome: { outcome: "cancelled" } };
@@ -13,7 +21,7 @@ function buildAgent(optionId: string | null) {
     sessionUpdate: async () => {},
     signal: controller.signal,
   };
-  return new CodexAcpAgent(fakeClient as any) as any;
+  return new CodexAcpAgent(fakeClient as never) as unknown as TestAgent;
 }
 
 test("legacy execCommandApproval maps allow_once to approved", async () => {
@@ -61,7 +69,7 @@ test("legacy approvals map cancelled to abort", async () => {
 
 test("requestUserInput uses extension result when available", async () => {
   const controller = new AbortController();
-  const fakeClient: any = {
+  const fakeClient = {
     requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
     sessionUpdate: async () => {},
     signal: controller.signal,
@@ -72,18 +80,22 @@ test("requestUserInput uses extension result when available", async () => {
       throw new Error("unsupported");
     },
   };
-  const agent = new CodexAcpAgent(fakeClient as any) as any;
+  const agent = new CodexAcpAgent(fakeClient as never) as unknown as TestAgent;
   agent.enableExtensionMethods = true;
   const res = await agent.handleToolRequestUserInput(
     { sessionId: "s" },
     { questions: [{ id: "q1", options: [{ label: "opt1", description: "" }] }] },
   );
-  expect(res.answers.q1.answers[0]).toBe("from-ext");
+  const answer = res.answers.q1;
+  if (!answer) {
+    throw new Error("expected q1 answer");
+  }
+  expect(answer.answers[0]).toBe("from-ext");
 });
 
 test("available commands use extension result when available", async () => {
   const controller = new AbortController();
-  const fakeClient: any = {
+  const fakeClient = {
     requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
     sessionUpdate: async () => {},
     signal: controller.signal,
@@ -101,9 +113,9 @@ test("available commands use extension result when available", async () => {
       throw new Error("unsupported");
     },
   };
-  const agent = new CodexAcpAgent(fakeClient as any) as any;
+  const agent = new CodexAcpAgent(fakeClient as never) as unknown as TestAgent;
   agent.enableExtensionMethods = true;
   const commands = await agent.resolveAvailableCommands();
   expect(commands).toHaveLength(1);
-  expect(commands[0].name).toBe("custom-cmd");
+  expect(commands[0]?.name).toBe("custom-cmd");
 });

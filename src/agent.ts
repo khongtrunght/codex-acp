@@ -87,6 +87,7 @@ import type {
   ThreadResumeResponse,
   ThreadStartResponse,
   ThreadTokenUsageUpdatedNotification,
+  ThreadItem,
   ToolRequestUserInputParams,
   TurnCompletedNotification,
   TurnPlanUpdatedNotification,
@@ -724,7 +725,7 @@ export class CodexAcpAgent implements Agent {
           sessionId: session.sessionId,
           update: {
             sessionUpdate: "plan",
-            entries: (Array.isArray(p.plan) ? p.plan : []).map((entry: any) => ({
+            entries: (Array.isArray(p.plan) ? p.plan : []).map((entry) => ({
               content: entry.step ?? "",
               priority: "medium",
               status: entry.status === "inProgress" ? "in_progress" : entry.status ?? "pending",
@@ -767,11 +768,7 @@ export class CodexAcpAgent implements Agent {
     }
   }
 
-  private async handleItemStarted(session: SessionState, item: any): Promise<void> {
-    if (!item || typeof item !== "object") {
-      return;
-    }
-
+  private async handleItemStarted(session: SessionState, item: ThreadItem): Promise<void> {
     if (item.type === "plan") {
       await this.client.sessionUpdate({
         sessionId: session.sessionId,
@@ -804,11 +801,7 @@ export class CodexAcpAgent implements Agent {
     });
   }
 
-  private async handleItemCompleted(session: SessionState, item: any): Promise<void> {
-    if (!item || typeof item !== "object") {
-      return;
-    }
-
+  private async handleItemCompleted(session: SessionState, item: ThreadItem): Promise<void> {
     if (item.type === "agentMessage") {
       return;
     }
@@ -930,7 +923,7 @@ export class CodexAcpAgent implements Agent {
 
   private async handleApprovalRequest(
     session: SessionState,
-    params: any,
+    params: CommandExecutionRequestApprovalParams | FileChangeRequestApprovalParams,
     kind: "command" | "file",
   ): Promise<unknown> {
     const decisionMap = new Map<string, unknown>();
@@ -942,7 +935,10 @@ export class CodexAcpAgent implements Agent {
       options,
       toolCall: {
         toolCallId: params.itemId ?? randomUUID(),
-        title: kind === "command" ? (params.command ?? "Execute command") : "Apply file changes",
+        title:
+          kind === "command" && "command" in params
+            ? (params.command ?? "Execute command")
+            : "Apply file changes",
       },
     };
 
@@ -963,7 +959,7 @@ export class CodexAcpAgent implements Agent {
 
   private async handlePermissionsApprovalRequest(
     session: SessionState,
-    params: any,
+    params: PermissionsRequestApprovalParams,
   ): Promise<unknown> {
     const options = [
       {

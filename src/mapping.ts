@@ -7,19 +7,28 @@ import type {
   SessionModeState,
   SessionModelState,
 } from "@agentclientprotocol/sdk";
+import type {
+  CodexUserInput,
+  CommandExecutionRequestApprovalParams,
+  FileChangeRequestApprovalParams,
+  Thread,
+  ThreadItem,
+} from "./vendor/codex-types.ts";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 
 export function buildPermissionOptions(
   kind: "command" | "file",
-  params: any,
+  params: CommandExecutionRequestApprovalParams | FileChangeRequestApprovalParams,
   decisionMap: Map<string, unknown>,
 ): RequestPermissionRequest["options"] {
   const options: RequestPermissionRequest["options"] = [];
 
   if (kind === "command") {
-    const decisions = (params.availableDecisions ?? ["accept", "acceptForSession", "decline"]) as unknown[];
+    const decisions = ("availableDecisions" in params
+      ? params.availableDecisions
+      : ["accept", "acceptForSession", "decline"]) as unknown[];
     for (const decision of decisions) {
       if (decision === "accept") {
         options.push({ optionId: "allow_once", name: "Allow once", kind: "allow_once" });
@@ -52,8 +61,8 @@ export function buildPermissionOptions(
   return options;
 }
 
-export async function promptToCodexInput(prompt: PromptRequest): Promise<any[]> {
-  const input: any[] = [];
+export async function promptToCodexInput(prompt: PromptRequest): Promise<CodexUserInput[]> {
+  const input: CodexUserInput[] = [];
 
   for (const block of prompt.prompt) {
     if (block.type === "text") {
@@ -149,20 +158,23 @@ function parseDataImageUri(uri: string): { mimeType: string; base64Data: string 
   };
 }
 
-export function toolStatusFromItem(item: any): "completed" | "failed" {
+export function toolStatusFromItem(item: ThreadItem): "completed" | "failed" {
   if (item.type === "commandExecution") {
     return item.status === "failed" ? "failed" : "completed";
   }
   if (item.type === "fileChange") {
     return item.status === "failed" ? "failed" : "completed";
   }
-  if (item.type === "mcpToolCall" || item.type === "dynamicToolCall") {
-    return item.status === "error" || item.success === false ? "failed" : "completed";
+  if (item.type === "mcpToolCall") {
+    return item.status === "failed" ? "failed" : "completed";
+  }
+  if (item.type === "dynamicToolCall") {
+    return item.status === "failed" || item.success === false ? "failed" : "completed";
   }
   return "completed";
 }
 
-export function mapItemToToolCall(item: any, status: "pending" | "completed" | "failed"):
+export function mapItemToToolCall(item: ThreadItem, status: "pending" | "completed" | "failed"):
   | {
       toolCallId: string;
       title: string;
@@ -405,7 +417,7 @@ export function sanitizeMcpServerName(name: string): string {
 export async function replayThreadHistory(
   client: AgentSideConnection,
   sessionId: string,
-  thread: any,
+  thread: Thread,
 ): Promise<void> {
   const turns = Array.isArray(thread?.turns) ? thread.turns : [];
   for (const turn of turns) {

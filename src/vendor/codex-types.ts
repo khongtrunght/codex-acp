@@ -9,6 +9,9 @@ export type { ThreadResumeResponse } from "./codex-app-server-protocol/v2/Thread
 export type { ThreadForkResponse } from "./codex-app-server-protocol/v2/ThreadForkResponse.ts";
 export type { ThreadListResponse } from "./codex-app-server-protocol/v2/ThreadListResponse.ts";
 export type { ModelListResponse } from "./codex-app-server-protocol/v2/ModelListResponse.ts";
+export type { Thread } from "./codex-app-server-protocol/v2/Thread.ts";
+export type { ThreadItem } from "./codex-app-server-protocol/v2/ThreadItem.ts";
+export type { UserInput as CodexUserInput } from "./codex-app-server-protocol/v2/UserInput.ts";
 
 export type { AgentMessageDeltaNotification } from "./codex-app-server-protocol/v2/AgentMessageDeltaNotification.ts";
 export type { ReasoningTextDeltaNotification } from "./codex-app-server-protocol/v2/ReasoningTextDeltaNotification.ts";

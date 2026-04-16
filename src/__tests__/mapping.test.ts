@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { buildThreadConfigFromAcpMcpServers, promptToCodexInput } from "../mapping.ts";
+import type { PromptRequest } from "@agentclientprotocol/sdk";
+import type { McpServer } from "@agentclientprotocol/sdk";
 
 test("maps base64 image to localImage input", async () => {
   const onePx = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7r4QkAAAAASUVORK5CYII=";
@@ -9,31 +11,43 @@ test("maps base64 image to localImage input", async () => {
   });
 
   expect(out).toHaveLength(1);
-  expect(out[0]?.type).toBe("localImage");
-  expect(typeof out[0]?.path).toBe("string");
+  const first = out[0];
+  expect(first?.type).toBe("localImage");
+  if (!first || first.type !== "localImage") {
+    throw new Error("expected localImage");
+  }
+  expect(typeof first.path).toBe("string");
 });
 
 test("maps data URI image (non-standard) to localImage input", async () => {
   const onePx = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7r4QkAAAAASUVORK5CYII=";
   const out = await promptToCodexInput({
     sessionId: "s",
-    prompt: [{ type: "image", uri: `data:image/png;base64,${onePx}` } as any],
-  } as any);
+    prompt: [{ type: "image", uri: `data:image/png;base64,${onePx}` } as unknown as PromptRequest["prompt"][number]],
+  } as unknown as PromptRequest);
 
   expect(out).toHaveLength(1);
-  expect(out[0]?.type).toBe("localImage");
-  expect(typeof out[0]?.path).toBe("string");
+  const first = out[0];
+  expect(first?.type).toBe("localImage");
+  if (!first || first.type !== "localImage") {
+    throw new Error("expected localImage");
+  }
+  expect(typeof first.path).toBe("string");
 });
 
 test("maps audio input to descriptive text fallback", async () => {
   const out = await promptToCodexInput({
     sessionId: "s",
     prompt: [{ type: "audio", data: "aGVsbG8=", mimeType: "audio/wav" }],
-  } as any);
+  } as unknown as PromptRequest);
 
   expect(out).toHaveLength(1);
-  expect(out[0]?.type).toBe("text");
-  expect(String(out[0]?.text)).toContain("Audio input received");
+  const first = out[0];
+  expect(first?.type).toBe("text");
+  if (!first || first.type !== "text") {
+    throw new Error("expected text");
+  }
+  expect(first.text).toContain("Audio input received");
 });
 
 test("maps SSE MCP server into Codex mcp_servers config", () => {
@@ -44,9 +58,15 @@ test("maps SSE MCP server into Codex mcp_servers config", () => {
       url: "https://example.com/sse",
       headers: [{ name: "Authorization", value: "Bearer x" }],
     },
-  ] as any);
+  ] as McpServer[]);
 
   expect(config).toBeTruthy();
-  expect((config as any).mcp_servers.my_sse.url).toBe("https://example.com/sse");
-  expect((config as any).mcp_servers.my_sse.http_headers.Authorization).toBe("Bearer x");
+  const mcpServers = (config as { mcp_servers: Record<string, { url: string; http_headers?: Record<string, string> }> })
+    .mcp_servers;
+  const server = mcpServers.my_sse;
+  if (!server) {
+    throw new Error("expected my_sse config");
+  }
+  expect(server.url).toBe("https://example.com/sse");
+  expect(server.http_headers?.Authorization).toBe("Bearer x");
 });
