@@ -9,6 +9,8 @@ TypeScript ACP adapter that bridges ACP clients to `codex app-server` over JSON-
 - Maps ACP session lifecycle to Codex threads:
   - `session/new` -> `thread/start`
   - `session/load` -> `thread/resume`
+  - `session/resume` -> `thread/resume`
+  - `session/fork` -> `thread/fork`
   - `session/list` -> `thread/list`
   - `session/prompt` -> `turn/start`
   - `session/cancel` -> `turn/interrupt`

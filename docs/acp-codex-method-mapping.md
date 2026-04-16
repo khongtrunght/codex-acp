@@ -16,6 +16,8 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 | `authenticate` | n/a | [x] | Hiện no-op, trả success |
 | `session/new` (`newSession`) | `thread/start` | [x] | Tạo thread mới; có map `mcpServers` -> `config.mcp_servers` |
 | `session/load` (`loadSession`) | `thread/resume` | [x] | Resume theo `sessionId` (thread id) |
+| `session/resume` (`unstable_resumeSession`) | `thread/resume` | [x] | Resume không replay history |
+| `session/fork` (`unstable_forkSession`) | `thread/fork` | [x] | Tạo session mới từ thread hiện có |
 | `session/list` (`listSessions`) | `thread/list` | [x] | Có map `cursor`, `cwd` |
 | `session/prompt` (`prompt`) | `turn/start` | [x] | Chờ `turn/completed` để trả `stopReason` |
 | `session/cancel` (`cancel`) | `turn/interrupt` | [x] | Cần `threadId` + `turnId` đang chạy |

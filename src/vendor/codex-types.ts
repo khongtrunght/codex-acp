@@ -6,6 +6,7 @@ export type { v2 as CodexV2 } from "./codex-app-server-protocol/index.ts";
 
 export type { ThreadStartResponse } from "./codex-app-server-protocol/v2/ThreadStartResponse.ts";
 export type { ThreadResumeResponse } from "./codex-app-server-protocol/v2/ThreadResumeResponse.ts";
+export type { ThreadForkResponse } from "./codex-app-server-protocol/v2/ThreadForkResponse.ts";
 export type { ThreadListResponse } from "./codex-app-server-protocol/v2/ThreadListResponse.ts";
 export type { ModelListResponse } from "./codex-app-server-protocol/v2/ModelListResponse.ts";
 

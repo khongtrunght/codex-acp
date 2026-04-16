@@ -14,12 +14,16 @@ import type {
   ListSessionsResponse,
   LoadSessionRequest,
   LoadSessionResponse,
+  ForkSessionRequest,
+  ForkSessionResponse,
   NewSessionRequest,
   NewSessionResponse,
   PromptRequest,
   PromptResponse,
   RequestPermissionRequest,
   RequestPermissionResponse,
+  ResumeSessionRequest,
+  ResumeSessionResponse,
   AvailableCommand,
   SessionConfigOption,
   SessionInfo,
@@ -78,6 +82,7 @@ import type {
   ReasoningSummaryTextDeltaNotification,
   ReasoningTextDeltaNotification,
   ThreadListResponse,
+  ThreadForkResponse,
   ThreadNameUpdatedNotification,
   ThreadResumeResponse,
   ThreadStartResponse,
@@ -149,6 +154,8 @@ export class CodexAcpAgent implements Agent {
         sessionCapabilities: {
           list: {},
           close: {},
+          resume: {},
+          fork: {},
         },
       },
       authMethods: [
@@ -176,7 +183,6 @@ export class CodexAcpAgent implements Agent {
   }
 
   async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
-    const sessionId = randomUUID();
     const rpc = new CodexAppServerRpc();
     await rpc.start();
 
@@ -195,6 +201,7 @@ export class CodexAcpAgent implements Agent {
     const currentModeId = mapApprovalPolicyToModeId(startResponse.approvalPolicy);
     const modes = buildModeState(currentModeId);
     const configOptions = buildConfigOptions(modes, modelState);
+    const sessionId = startResponse.thread.id;
 
     const session: SessionState = {
       sessionId,
@@ -267,6 +274,100 @@ export class CodexAcpAgent implements Agent {
     await replayThreadHistory(this.client, session.sessionId, resumeResponse.thread);
 
     return {
+      modes,
+      models: modelState,
+      configOptions,
+    };
+  }
+
+  async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+    const rpc = new CodexAppServerRpc();
+    await rpc.start();
+
+    const modelState = await this.loadModelState(rpc);
+    const threadConfig = buildThreadConfigFromAcpMcpServers(params.mcpServers ?? []);
+    const resumeResponse = (await rpc.request("thread/resume", {
+      threadId: params.sessionId,
+      cwd: params.cwd,
+      persistExtendedHistory: true,
+      model: modelState.currentModelId,
+      ...(threadConfig ? { config: threadConfig } : {}),
+    })) as ThreadResumeResponse;
+
+    const currentModeId = mapApprovalPolicyToModeId(resumeResponse.approvalPolicy);
+    const modes = buildModeState(currentModeId);
+    const configOptions = buildConfigOptions(modes, modelState);
+
+    const session: SessionState = {
+      sessionId: params.sessionId,
+      rpc,
+      threadId: resumeResponse.thread.id,
+      cwd: resumeResponse.cwd ?? params.cwd,
+      modes,
+      models: modelState,
+      configOptions,
+      currentModeId,
+      currentModelId: modelState.currentModelId,
+      promptWaiter: null,
+      planDeltaByItemId: new Map(),
+      terminalProcessByItemId: new Map(),
+    };
+
+    rpc.setNotificationHandler((notification) => this.handleNotification(session, notification));
+    rpc.setServerRequestHandler((request) => this.handleServerRequest(session, request));
+
+    this.sessions.set(params.sessionId, session);
+    await this.sendAvailableCommandsUpdate(params.sessionId);
+
+    return {
+      modes,
+      models: modelState,
+      configOptions,
+    };
+  }
+
+  async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
+    const rpc = new CodexAppServerRpc();
+    await rpc.start();
+
+    const modelState = await this.loadModelState(rpc);
+    const threadConfig = buildThreadConfigFromAcpMcpServers(params.mcpServers ?? []);
+    const forkResponse = (await rpc.request("thread/fork", {
+      threadId: params.sessionId,
+      cwd: params.cwd,
+      persistExtendedHistory: true,
+      model: modelState.currentModelId,
+      ...(threadConfig ? { config: threadConfig } : {}),
+    })) as ThreadForkResponse;
+
+    const currentModeId = mapApprovalPolicyToModeId(forkResponse.approvalPolicy);
+    const modes = buildModeState(currentModeId);
+    const configOptions = buildConfigOptions(modes, modelState);
+    const forkedSessionId = forkResponse.thread.id;
+
+    const session: SessionState = {
+      sessionId: forkedSessionId,
+      rpc,
+      threadId: forkResponse.thread.id,
+      cwd: forkResponse.cwd ?? params.cwd,
+      modes,
+      models: modelState,
+      configOptions,
+      currentModeId,
+      currentModelId: modelState.currentModelId,
+      promptWaiter: null,
+      planDeltaByItemId: new Map(),
+      terminalProcessByItemId: new Map(),
+    };
+
+    rpc.setNotificationHandler((notification) => this.handleNotification(session, notification));
+    rpc.setServerRequestHandler((request) => this.handleServerRequest(session, request));
+
+    this.sessions.set(forkedSessionId, session);
+    await this.sendAvailableCommandsUpdate(forkedSessionId);
+
+    return {
+      sessionId: forkedSessionId,
       modes,
       models: modelState,
       configOptions,
