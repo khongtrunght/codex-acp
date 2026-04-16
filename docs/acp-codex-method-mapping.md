@@ -81,6 +81,5 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 
 ## Gaps ưu tiên tiếp theo
 
-1. Chuẩn hóa extension contract (`codex/request_user_input`, `codex/dynamic_tool_call`, `codex/mcp_eliicitation_request`) để client implement đồng nhất.
-2. Thay static command set bằng nguồn dynamic khi Codex App Server expose command list chính thức.
-3. Nâng audio từ text fallback sang native mapping nếu Codex mở input audio cho `turn/start`.
+1. Thay static command set bằng nguồn dynamic khi Codex App Server expose command list chính thức.
+2. Nâng audio từ text fallback sang native mapping nếu Codex mở input audio cho `turn/start`.

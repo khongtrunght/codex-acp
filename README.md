@@ -60,6 +60,8 @@ Optional extension hooks for richer behavior (if ACP client implements them):
 - `codex/dynamic_tool_call`
 - `codex/mcp_eliicitation_request`
 
+Extension payload contract: [`docs/extension-method-contract.md`](./docs/extension-method-contract.md)
+
 ## Quick sanity test
 
 ```bash
