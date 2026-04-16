@@ -67,7 +67,10 @@ Extension payload contract: [`docs/extension-method-contract.md`](./docs/extensi
 ```bash
 bun run typecheck
 bun run test
+bun run smoke
 ```
+
+`bun run smoke` requires local `codex` CLI access/auth because it performs an end-to-end prompt turn.
 
 Implementation is modularized under `src/` (`agent`, `rpc`, `mapping`, `main`), with `src/index.ts` as the executable entrypoint (same style as `mission-agent-acp`).
 
@@ -83,3 +86,11 @@ Sync types từ upstream:
 ```bash
 scripts/sync-codex-schema-types.sh
 ```
+
+## CI
+
+- GitHub Actions workflow: `.github/workflows/ci.yml`
+- Runs on push/PR:
+  - `bun install --frozen-lockfile`
+  - `bun run typecheck`
+  - `bun run test`

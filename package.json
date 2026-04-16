@@ -11,7 +11,8 @@
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "smoke": "node scripts/smoke-acp.mjs"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "0.18.1"
