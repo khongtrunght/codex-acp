@@ -73,9 +73,37 @@ test("requestUserInput uses extension result when available", async () => {
     },
   };
   const agent = new CodexAcpAgent(fakeClient as any) as any;
+  agent.enableExtensionMethods = true;
   const res = await agent.handleToolRequestUserInput(
     { sessionId: "s" },
     { questions: [{ id: "q1", options: [{ label: "opt1", description: "" }] }] },
   );
   expect(res.answers.q1.answers[0]).toBe("from-ext");
+});
+
+test("available commands use extension result when available", async () => {
+  const controller = new AbortController();
+  const fakeClient: any = {
+    requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+    sessionUpdate: async () => {},
+    signal: controller.signal,
+    extMethod: async (method: string) => {
+      if (method === "codex/available_commands") {
+        return {
+          availableCommands: [
+            {
+              name: "custom-cmd",
+              description: "from extension",
+            },
+          ],
+        };
+      }
+      throw new Error("unsupported");
+    },
+  };
+  const agent = new CodexAcpAgent(fakeClient as any) as any;
+  agent.enableExtensionMethods = true;
+  const commands = await agent.resolveAvailableCommands();
+  expect(commands).toHaveLength(1);
+  expect(commands[0].name).toBe("custom-cmd");
 });

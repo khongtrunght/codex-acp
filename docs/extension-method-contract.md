@@ -4,6 +4,20 @@ Bridge gọi các extension method sau qua ACP `extMethod` (nếu client hỗ tr
 
 Nếu client không hỗ trợ hoặc throw error, bridge sẽ fallback an toàn.
 
+## Extension Opt-in
+
+Bridge chỉ gọi extension methods khi client bật:
+
+```json
+{
+  "clientCapabilities": {
+    "_meta": {
+      "codex-extension-methods": true
+    }
+  }
+}
+```
+
 ## 1) `codex/request_user_input`
 
 - Purpose: trả lời cho Codex server request `item/tool/requestUserInput`.

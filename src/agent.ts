@@ -118,6 +118,7 @@ export class CodexAcpAgent implements Agent {
   private readonly client: AgentSideConnection;
   private closed = false;
   private lifecycleHooksInstalled = false;
+  private enableExtensionMethods = false;
   private static readonly STATIC_AVAILABLE_COMMANDS: AvailableCommand[] = [
     { name: "review", description: "Run code review in current thread." },
     { name: "review-branch", description: "Review current git branch." },
@@ -131,8 +132,9 @@ export class CodexAcpAgent implements Agent {
     this.client = client;
   }
 
-  async initialize(_request: InitializeRequest): Promise<InitializeResponse> {
+  async initialize(request: InitializeRequest): Promise<InitializeResponse> {
     this.installLifecycleHooks();
+    this.enableExtensionMethods = request.clientCapabilities?._meta?.["codex-extension-methods"] === true;
 
     return {
       protocolVersion: 1,
@@ -549,13 +551,22 @@ export class CodexAcpAgent implements Agent {
   }
 
   private async sendAvailableCommandsUpdate(sessionId: string): Promise<void> {
+    const availableCommands = await this.resolveAvailableCommands();
     await this.client.sessionUpdate({
       sessionId,
       update: {
         sessionUpdate: "available_commands_update",
-        availableCommands: CodexAcpAgent.STATIC_AVAILABLE_COMMANDS,
+        availableCommands,
       },
     });
+  }
+
+  private async resolveAvailableCommands(): Promise<AvailableCommand[]> {
+    const extResponse = await this.tryExtMethod("codex/available_commands", {});
+    if (extResponse && this.isAvailableCommandsResponse(extResponse)) {
+      return extResponse.availableCommands;
+    }
+    return CodexAcpAgent.STATIC_AVAILABLE_COMMANDS;
   }
 
   private async closeAllSessions(): Promise<void> {
@@ -1026,6 +1037,9 @@ export class CodexAcpAgent implements Agent {
     method: string,
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown> | null> {
+    if (!this.enableExtensionMethods) {
+      return null;
+    }
     try {
       return await this.client.extMethod(method, params);
     } catch {
@@ -1053,6 +1067,22 @@ export class CodexAcpAgent implements Agent {
       "content" in value &&
       "_meta" in value
     );
+  }
+
+  private isAvailableCommandsResponse(
+    value: Record<string, unknown>,
+  ): value is { availableCommands: AvailableCommand[] } {
+    if (!Array.isArray(value.availableCommands)) {
+      return false;
+    }
+    return value.availableCommands.every((item) => {
+      return (
+        item &&
+        typeof item === "object" &&
+        typeof (item as { name?: unknown }).name === "string" &&
+        typeof (item as { description?: unknown }).description === "string"
+      );
+    });
   }
 
   private async handleLegacyExecCommandApproval(

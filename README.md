@@ -59,8 +59,13 @@ Optional extension hooks for richer behavior (if ACP client implements them):
 - `codex/request_user_input`
 - `codex/dynamic_tool_call`
 - `codex/mcp_eliicitation_request`
+- `codex/available_commands`
 
 Extension payload contract: [`docs/extension-method-contract.md`](./docs/extension-method-contract.md)
+
+To enable extension calls, client should advertise capability:
+
+- `initialize.clientCapabilities._meta["codex-extension-methods"] = true`
 
 ## Quick sanity test
 

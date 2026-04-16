@@ -43,7 +43,7 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 | `error` | `agent_message_chunk` + resolve prompt | [x] | hiện fallback message |
 | `item/plan/delta` | `plan` | [x] | stream plan text dạng incremental |
 | `turn/plan/updated` | `plan` | [x] | map full plan state (`pending/inProgress/completed`) |
-| session bootstrap | `available_commands_update` | [x] | publish static command set khi `newSession`/`loadSession` |
+| session bootstrap | `available_commands_update` | [x] | ext-method `codex/available_commands` trước, fallback static |
 | `item/commandExecution` lifecycle | `tool_call(_update)` + `_meta.terminal_*` | [x] | `terminal_info`, `terminal_output`, `terminal_exit` |
 
 ## Codex Server Requests handled by ACP bridge
@@ -53,12 +53,12 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 | `item/commandExecution/requestApproval` | gọi ACP `requestPermission` -> trả `decision` | [x] | Map allow/reject/cancel |
 | `item/fileChange/requestApproval` | gọi ACP `requestPermission` -> trả `decision` | [x] | |
 | `item/permissions/requestApproval` | gọi ACP `requestPermission` -> trả `permissions/scope` | [x] | hiện basic mapping |
-| `item/tool/requestUserInput` | ext-method -> fallback answers | [x] | thử `codex/request_user_input`, fallback chọn option đầu tiên |
+| `item/tool/requestUserInput` | ext-method -> fallback answers | [x] | khi opt-in extensions: thử `codex/request_user_input`, fallback chọn option đầu tiên |
 | `account/chatgptAuthTokens/refresh` | trả `{}` | [x] | no-op compatibility |
 | `applyPatchApproval` | gọi ACP `requestPermission` -> trả `decision` | [x] | hỗ trợ legacy approval flow |
 | `execCommandApproval` | gọi ACP `requestPermission` -> trả `decision` | [x] | hỗ trợ legacy approval flow |
-| `item/tool/call` (dynamic tools) | ext-method -> graceful fallback | [x] | thử `codex/dynamic_tool_call`, nếu không có thì `success:false` |
-| `mcpServer/elicitation/request` | ext-method -> graceful fallback | [x] | thử `codex/mcp_eliicitation_request`, nếu không có thì `decline` |
+| `item/tool/call` (dynamic tools) | ext-method -> graceful fallback | [x] | khi opt-in extensions: thử `codex/dynamic_tool_call`, nếu không có thì `success:false` |
+| `mcpServer/elicitation/request` | ext-method -> graceful fallback | [x] | khi opt-in extensions: thử `codex/mcp_eliicitation_request`, nếu không có thì `decline` |
 
 ## ACP Content -> Codex Input mapping
 
@@ -81,5 +81,4 @@ Tài liệu này mô tả mapping giữa ACP methods và Codex App Server JSON-R
 
 ## Gaps ưu tiên tiếp theo
 
-1. Thay static command set bằng nguồn dynamic khi Codex App Server expose command list chính thức.
-2. Nâng audio từ text fallback sang native mapping nếu Codex mở input audio cho `turn/start`.
+1. Nâng audio từ text fallback sang native mapping nếu Codex mở input audio cho `turn/start`.
