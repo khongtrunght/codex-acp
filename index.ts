@@ -34,6 +34,7 @@ import type {
   SetSessionModelRequest,
   SetSessionModelResponse,
   StopReason,
+  McpServer,
 } from "@agentclientprotocol/sdk";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -352,6 +353,7 @@ class CodexAcpAgent implements Agent {
     await rpc.start();
 
     const modelState = await this.loadModelState(rpc);
+    const threadConfig = buildThreadConfigFromAcpMcpServers(params.mcpServers);
     const startResponse = (await rpc.request("thread/start", {
       cwd: params.cwd,
       approvalPolicy: DEFAULT_APPROVAL_POLICY,
@@ -359,6 +361,7 @@ class CodexAcpAgent implements Agent {
       experimentalRawEvents: false,
       persistExtendedHistory: DEFAULT_PERSIST_EXTENDED_HISTORY,
       model: modelState.currentModelId,
+      ...(threadConfig ? { config: threadConfig } : {}),
     })) as any;
 
     const currentModeId = mapApprovalPolicyToModeId(startResponse.approvalPolicy);
@@ -396,11 +399,13 @@ class CodexAcpAgent implements Agent {
     await rpc.start();
 
     const modelState = await this.loadModelState(rpc);
+    const threadConfig = buildThreadConfigFromAcpMcpServers(params.mcpServers);
     const resumeResponse = (await rpc.request("thread/resume", {
       threadId: params.sessionId,
       cwd: params.cwd,
       persistExtendedHistory: true,
       model: modelState.currentModelId,
+      ...(threadConfig ? { config: threadConfig } : {}),
     })) as any;
 
     const currentModeId = mapApprovalPolicyToModeId(resumeResponse.approvalPolicy);
@@ -1116,6 +1121,63 @@ function modeConfigOption(modes: SessionModeState): SessionConfigOption {
 
 function buildConfigOptions(modes: SessionModeState, models: SessionModelState): SessionConfigOption[] {
   return [modeConfigOption(modes), modelConfigOption(models)];
+}
+
+function buildThreadConfigFromAcpMcpServers(mcpServers: McpServer[]): Record<string, unknown> | undefined {
+  if (!Array.isArray(mcpServers) || mcpServers.length === 0) {
+    return undefined;
+  }
+
+  const codexMcpServers: Record<string, unknown> = {};
+
+  for (const server of mcpServers) {
+    const name = sanitizeMcpServerName(server.name);
+
+    if ("command" in server) {
+      const envMap =
+        server.env.length > 0
+          ? Object.fromEntries(server.env.map((entry: { name: string; value: string }) => [entry.name, entry.value]))
+          : undefined;
+
+      codexMcpServers[name] = {
+        command: server.command,
+        args: server.args,
+        ...(envMap ? { env: envMap } : {}),
+      };
+      continue;
+    }
+
+    if ("type" in server && server.type === "http") {
+      const headerMap =
+        server.headers.length > 0
+          ? Object.fromEntries(
+              server.headers.map((header: { name: string; value: string }) => [header.name, header.value]),
+            )
+          : undefined;
+
+      codexMcpServers[name] = {
+        url: server.url,
+        ...(headerMap ? { http_headers: headerMap } : {}),
+      };
+      continue;
+    }
+
+    // codex currently doesn't accept SSE transport config.
+    console.error(`[codex-acp] ignoring unsupported MCP SSE server: ${server.name}`);
+  }
+
+  if (Object.keys(codexMcpServers).length === 0) {
+    return undefined;
+  }
+
+  return {
+    mcp_servers: codexMcpServers,
+  };
+}
+
+function sanitizeMcpServerName(name: string): string {
+  const trimmed = name.trim().replace(/\s+/g, "_");
+  return trimmed.length > 0 ? trimmed : "mcp_server";
 }
 
 async function replayThreadHistory(

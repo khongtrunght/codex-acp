@@ -46,7 +46,8 @@ Optional environment variable:
 
 ## Current limitations
 
-- ACP `mcpServers` passed in `session/new` are not yet projected into Codex thread config
+- ACP `mcpServers` are projected to Codex thread config as `config.mcp_servers` for `stdio` and `http` transports
+- ACP `sse` MCP transport is currently ignored (Codex app-server config does not accept SSE MCP transport shape)
 - `item/tool/requestUserInput` currently returns empty answers
 - `session/set_mode` and `session/set_model` update session defaults and apply on subsequent turns
 
