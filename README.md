@@ -87,6 +87,27 @@ bun run smoke
 
 `bun run smoke` requires local `codex` CLI access/auth because it performs an end-to-end prompt turn.
 
+## Build standalone binary
+
+`bun build --compile` bundles the bridge into a single native executable (Bun runtime included, no `node`/`bun` required at runtime):
+
+```bash
+# host platform → dist/codex-acp-bridge
+bun run build:binary
+
+# cross-compile targets
+bun run build:binary:darwin-arm64
+bun run build:binary:darwin-x64
+bun run build:binary:linux-x64
+bun run build:binary:linux-arm64
+bun run build:binary:windows-x64
+
+# everything in one go (release builds)
+bun run build:binary:all
+```
+
+Smoke-test a compiled binary with `BRIDGE_BIN=./dist/codex-acp-bridge bun run smoke`.
+
 Implementation is modularized under `src/` (`agent`, `rpc`, `mapping`, `main`), with `src/index.ts` as the executable entrypoint (same style as `mission-agent-acp`).
 
 ## Codex Protocol Types

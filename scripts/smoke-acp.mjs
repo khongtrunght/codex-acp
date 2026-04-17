@@ -26,7 +26,10 @@ function withTimeout(promise, ms, label) {
 }
 
 async function main() {
-  const bridge = spawn('bun', ['run', 'src/index.ts'], { stdio: ['pipe', 'pipe', 'inherit'] });
+  // Allow smoke-testing a compiled binary: BRIDGE_BIN=dist/codex-acp-bridge.
+  const bridgeBin = process.env.BRIDGE_BIN;
+  const [cmd, args] = bridgeBin ? [bridgeBin, []] : ['bun', ['run', 'src/index.ts']];
+  const bridge = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'inherit'] });
 
   try {
     const stream = ndJsonStream(Writable.toWeb(bridge.stdin), Readable.toWeb(bridge.stdout));
