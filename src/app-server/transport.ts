@@ -22,6 +22,12 @@ export type CodexAppServerTransport = {
   once: (event: string, listener: (...args: unknown[]) => void) => unknown;
 };
 
+/**
+ * Gracefully shuts a Codex subprocess down: tears down stdio streams,
+ * sends SIGTERM (to the process group on non-Windows so child processes
+ * also receive it), and schedules a SIGKILL fallback after the given
+ * delay in case the process doesn't exit on its own.
+ */
 export function closeCodexAppServerTransport(
   child: CodexAppServerTransport,
   options: { forceKillDelayMs?: number } = {},

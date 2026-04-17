@@ -22,6 +22,11 @@ export type MappedToolCall = {
   rawOutput?: unknown;
 };
 
+/**
+ * Infers an ACP tool-call status from a completed Codex `ThreadItem`.
+ * Defaults to `"completed"` when the item type doesn't expose a failure
+ * signal. `dynamicToolCall` also treats `success === false` as failed.
+ */
 export function toolStatusFromItem(item: ThreadItem): "completed" | "failed" {
   if (item.type === "commandExecution") {
     return item.status === "failed" ? "failed" : "completed";
@@ -38,6 +43,12 @@ export function toolStatusFromItem(item: ThreadItem): "completed" | "failed" {
   return "completed";
 }
 
+/**
+ * Projects a Codex thread item into the ACP tool-call shape used for
+ * `tool_call` and `tool_call_update` notifications. Returns `null` when the
+ * item has no ACP counterpart (e.g. `userMessage`, `agentMessage`) so
+ * callers can skip it cleanly.
+ */
 export function mapItemToToolCall(item: ThreadItem, status: ToolCallStatus): MappedToolCall | null {
   switch (item.type) {
     case "commandExecution":
@@ -116,6 +127,11 @@ export function mapItemToToolCall(item: ThreadItem, status: ToolCallStatus): Map
   }
 }
 
+/**
+ * Turns a multi-line thread preview into a single-line title, truncating
+ * with an ellipsis past 120 characters. Returns `null` for empty or
+ * whitespace-only inputs so callers can fall back to a provided name.
+ */
 export function toSessionTitle(preview: string | null | undefined): string | null {
   if (!preview) {
     return null;

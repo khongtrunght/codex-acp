@@ -51,6 +51,24 @@ export type CodexSessionOptions = {
   approvals: ApprovalBridge;
 };
 
+/**
+ * Per-ACP-session wrapper around one Codex thread. Lives on top of the
+ * shared {@link CodexAppServerClient}: registers notification and server-
+ * request handlers that filter by `threadId` so fan-out from the shared
+ * client stays scoped to this session.
+ *
+ * Responsibilities:
+ *  - Drive `turn/start`, `turn/interrupt` against its thread.
+ *  - Track active-turn state via {@link EventProjector} and resolve the
+ *    prompt promise on `turn/completed`.
+ *  - Bridge Codex approval/tool server-requests to ACP `requestPermission`
+ *    and the client's extension methods.
+ *  - Track `modes` and `models` state plus push `current_mode_update`
+ *    session notifications when the user changes them.
+ *
+ * `close()` unregisters handlers and cancels the active turn but does NOT
+ * close the shared client.
+ */
 export class CodexSession {
   readonly sessionId: string;
   readonly cwd: string;
@@ -116,6 +134,11 @@ export class CodexSession {
     return this.modelsState.currentModelId;
   }
 
+  /**
+   * Updates the session's approval mode and emits an ACP
+   * `current_mode_update`. The new mode applies to subsequent `turn/start`
+   * calls as the Codex `approvalPolicy`.
+   */
   async setMode(modeId: string): Promise<void> {
     const found = this.modesState.availableModes.find((mode) => mode.id === modeId);
     if (!found) {
@@ -129,6 +152,11 @@ export class CodexSession {
     });
   }
 
+  /**
+   * Updates the session's default model and emits an ACP
+   * `config_option_update`. The new model applies to subsequent `turn/start`
+   * calls.
+   */
   async setModel(modelId: string): Promise<void> {
     const found = this.modelsState.availableModels.find((model) => model.modelId === modelId);
     if (!found) {
@@ -142,6 +170,12 @@ export class CodexSession {
     });
   }
 
+  /**
+   * Starts a Codex turn for this thread and waits for it to complete.
+   * Throws if a turn is already in flight. The returned `stopReason` is
+   * `"end_turn"` on normal completion and `"cancelled"` if the turn was
+   * interrupted (by `cancel()` or by the client).
+   */
   async prompt(params: PromptRequest): Promise<PromptResponse> {
     if (this.projector.currentTurnId) {
       throw RequestError.invalidParams(undefined, "A turn is already running for this session.");
@@ -167,6 +201,11 @@ export class CodexSession {
     };
   }
 
+  /**
+   * Interrupts the active turn, if any. If the RPC fails the active-turn
+   * promise is still resolved with `"cancelled"` so the ACP client is not
+   * left hanging.
+   */
   async cancel(): Promise<void> {
     const turnId = this.projector.currentTurnId;
     if (!turnId) {
@@ -180,6 +219,12 @@ export class CodexSession {
     }
   }
 
+  /**
+   * Idempotent. Unregisters this session's notification/request handlers on
+   * the shared client and resolves any pending prompt promise with
+   * `"cancelled"`. Does NOT close the shared client; the agent does that
+   * on connection shutdown.
+   */
   async close(): Promise<void> {
     if (this.closed) {
       return;

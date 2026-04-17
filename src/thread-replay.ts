@@ -2,6 +2,12 @@ import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 import { mapItemToToolCall } from "./tool-mapping.ts";
 import type { Thread } from "./app-server/protocol.ts";
 
+/**
+ * Replays a resumed thread's past items as ACP `session/update` messages so
+ * the client can rebuild the transcript. Emits `user_message_chunk`,
+ * `agent_message_chunk`, and `tool_call` updates — one per item, in order.
+ * Item types with no ACP equivalent are skipped.
+ */
 export async function replayThreadHistory(
   client: AgentSideConnection,
   sessionId: string,

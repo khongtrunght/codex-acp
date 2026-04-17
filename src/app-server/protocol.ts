@@ -40,14 +40,17 @@ export type CodexServerNotification = {
   params?: JsonValue;
 };
 
+/** True when `value` is a non-null, non-array JSON object. */
 export function isJsonObject(value: JsonValue | undefined): value is JsonObject {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+/** True when `message` has `id` and no `method` — i.e. a JSON-RPC response. */
 export function isRpcResponse(message: RpcMessage): message is RpcResponse {
   return "id" in message && !("method" in message);
 }
 
+/** Casts `value` to a `JsonObject` only if it passes the structural check. */
 export function coerceJsonObject(value: unknown): JsonObject | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;

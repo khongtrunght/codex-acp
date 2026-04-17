@@ -12,6 +12,13 @@ export const CODEX_EXTENSION_METHODS = {
 export type CodexExtensionMethod =
   (typeof CODEX_EXTENSION_METHODS)[keyof typeof CODEX_EXTENSION_METHODS];
 
+/**
+ * Safe wrapper around `AgentSideConnection.extMethod` for the bridge's
+ * optional hooks. Only issues calls when the client opted in (by setting
+ * `clientCapabilities._meta["codex-extension-methods"] = true` during ACP
+ * `initialize`); otherwise, and on any RPC error, returns `null` so callers
+ * can fall back to their default behavior.
+ */
 export class ExtensionClient {
   private readonly connection: AgentSideConnection;
   private readonly enabled: boolean;
@@ -21,10 +28,16 @@ export class ExtensionClient {
     this.enabled = enabled;
   }
 
+  /** True when the client advertised the `codex-extension-methods` capability. */
   get isEnabled(): boolean {
     return this.enabled;
   }
 
+  /**
+   * Invokes an extension method. Returns `null` when the feature is
+   * disabled or the remote call throws; callers should treat `null` as
+   * "no extension response, use the built-in fallback".
+   */
   async call(
     method: CodexExtensionMethod,
     params: Record<string, unknown>,
@@ -40,6 +53,7 @@ export class ExtensionClient {
   }
 }
 
+/** Shape guard for a `codex/available_commands` extension response. */
 export function isAvailableCommandsResponse(
   value: Record<string, unknown>,
 ): value is { availableCommands: AvailableCommand[] } {
@@ -55,12 +69,14 @@ export function isAvailableCommandsResponse(
   );
 }
 
+/** Shape guard for a `codex/request_user_input` extension response. */
 export function isToolRequestUserInputResponse(
   value: Record<string, unknown>,
 ): value is { answers: Record<string, { answers: string[] }> } {
   return typeof value.answers === "object" && value.answers !== null;
 }
 
+/** Shape guard for a `codex/dynamic_tool_call` extension response. */
 export function isDynamicToolCallResponse(value: Record<string, unknown>): value is {
   success: boolean;
   contentItems: Array<{ type: string; text?: string; imageUrl?: string }>;
@@ -68,6 +84,7 @@ export function isDynamicToolCallResponse(value: Record<string, unknown>): value
   return typeof value.success === "boolean" && Array.isArray(value.contentItems);
 }
 
+/** Shape guard for a `codex/mcp_eliicitation_request` extension response. */
 export function isMcpElicitationResponse(value: Record<string, unknown>): value is {
   action: "accept" | "decline" | "cancel";
   content: unknown;

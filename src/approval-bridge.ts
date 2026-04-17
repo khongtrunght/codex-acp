@@ -21,6 +21,12 @@ type LegacyDecision = "approved" | "approved_for_session" | "denied" | "abort";
 
 const COMMAND_DEFAULT_DECISIONS: string[] = ["accept", "acceptForSession", "decline"];
 
+/**
+ * Translates Codex approval server-requests into ACP `requestPermission`
+ * calls. The user's ACP client decides whether to allow once, always, or
+ * reject; this class maps the returned `optionId` back to the Codex
+ * decision strings Codex expects.
+ */
 export class ApprovalBridge {
   private readonly connection: AgentSideConnection;
 
@@ -28,6 +34,12 @@ export class ApprovalBridge {
     this.connection = connection;
   }
 
+  /**
+   * Handles the v2 `item/commandExecution/requestApproval` and
+   * `item/fileChange/requestApproval` server-requests. Returns Codex's
+   * decision string — `"accept"`, `"acceptForSession"`, `"decline"`, or
+   * `"cancel"` — based on the user's pick.
+   */
   async commandOrFileApproval(
     sessionId: string,
     params: ApprovalParams,
@@ -48,6 +60,12 @@ export class ApprovalBridge {
     return { decision: resolveV2Decision(response, decisionMap) };
   }
 
+  /**
+   * Handles `item/permissions/requestApproval`. Prompts the user for an
+   * allow/reject decision; on allow, echoes back the requested permissions;
+   * on reject, returns an empty permissions object. Scope is always
+   * `"turn"` (single-turn grant).
+   */
   async permissionsApproval(
     sessionId: string,
     params: PermissionsRequestApprovalParams,
@@ -72,6 +90,12 @@ export class ApprovalBridge {
     };
   }
 
+  /**
+   * Handles pre-v2 `execCommandApproval`. Options are allow-once,
+   * allow-for-session, or reject; the outcome is mapped to Codex's legacy
+   * decision strings (`approved`, `approved_for_session`, `denied`, or
+   * `abort` when the prompt was cancelled).
+   */
   async legacyExecCommandApproval(
     sessionId: string,
     params: ExecCommandApprovalParams,
@@ -88,6 +112,10 @@ export class ApprovalBridge {
     return { decision: resolveLegacyDecision(response) };
   }
 
+  /**
+   * Handles pre-v2 `applyPatchApproval`. Same decision mapping as
+   * {@link legacyExecCommandApproval}, rendered as "Apply patch" in the UI.
+   */
   async legacyApplyPatchApproval(
     sessionId: string,
     params: ApplyPatchApprovalParams,

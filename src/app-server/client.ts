@@ -26,6 +26,7 @@ type PendingRequest = {
   cleanup: () => void;
 };
 
+/** Error thrown when the Codex app-server responds with a JSON-RPC error. */
 export class CodexAppServerRpcError extends Error {
   readonly code?: number;
   readonly data?: JsonValue;
@@ -46,6 +47,23 @@ export type CodexServerNotificationHandler = (
   notification: CodexServerNotification,
 ) => Promise<void> | void;
 
+/**
+ * JSON-RPC client for `codex app-server` over stdio.
+ *
+ * Spawns (or adopts) the codex subprocess, serializes JSON-RPC frames over
+ * stdin, parses newline-delimited frames from stdout, and multiplexes:
+ *  - outgoing `request` calls keyed by numeric ID, with optional
+ *    per-call timeout and `AbortSignal` cancellation;
+ *  - incoming notifications fanned out to every registered handler;
+ *  - incoming server-requests tried against each registered handler in
+ *    insertion order — the first handler to return a non-`undefined`
+ *    result wins; if none respond, {@link defaultServerRequestResponse}
+ *    is used.
+ *
+ * Construct with {@link CodexAppServerClient.start} and then call
+ * {@link initialize} before any other request (the handshake enforces the
+ * minimum codex app-server version).
+ */
 export class CodexAppServerClient {
   private readonly child: CodexAppServerTransport;
   private readonly lines: ReadlineInterface;
@@ -79,6 +97,11 @@ export class CodexAppServerClient {
     });
   }
 
+  /**
+   * Spawns a codex subprocess using defaults from
+   * {@link resolveCodexAppServerRuntimeOptions}. Any provided fields
+   * override the defaults.
+   */
   static start(options?: Partial<CodexAppServerStartOptions>): CodexAppServerClient {
     const defaults = resolveCodexAppServerRuntimeOptions().start;
     const startOptions: CodexAppServerStartOptions = {
@@ -89,10 +112,16 @@ export class CodexAppServerClient {
     return new CodexAppServerClient(createStdioTransport(startOptions));
   }
 
+  /** Test escape hatch: build a client around a pre-made transport mock. */
   static fromTransportForTests(child: CodexAppServerTransport): CodexAppServerClient {
     return new CodexAppServerClient(child);
   }
 
+  /**
+   * Performs the Codex `initialize` handshake and validates the reported
+   * version meets {@link MIN_CODEX_APP_SERVER_VERSION}. Safe to call
+   * multiple times (subsequent calls are no-ops).
+   */
   async initialize(): Promise<void> {
     if (this.initialized) {
       return;
@@ -112,6 +141,13 @@ export class CodexAppServerClient {
     this.initialized = true;
   }
 
+  /**
+   * Sends a JSON-RPC request and awaits its response. Supply a `timeoutMs`
+   * (rounded up to 100 ms) or a precreated `AbortSignal` to cancel an
+   * in-flight call. Rejects with {@link CodexAppServerRpcError} on a
+   * protocol-level error and a plain `Error` on timeout, abort, or client
+   * close.
+   */
   request<T = JsonValue | undefined>(
     method: string,
     params?: JsonValue,
@@ -180,25 +216,41 @@ export class CodexAppServerClient {
     });
   }
 
+  /** Sends a JSON-RPC notification (no response expected). */
   notify(method: string, params?: JsonValue): void {
     this.writeMessage({ method, params });
   }
 
+  /**
+   * Registers a server-request handler. Handlers run in insertion order;
+   * the first to return a non-`undefined` value produces the reply.
+   * Returns a dispose fn that unregisters the handler.
+   */
   addRequestHandler(handler: CodexServerRequestHandler): () => void {
     this.requestHandlers.add(handler);
     return () => this.requestHandlers.delete(handler);
   }
 
+  /**
+   * Registers a notification handler. All handlers run for every
+   * notification; callers should filter internally (e.g. by `threadId`).
+   * Returns a dispose fn.
+   */
   addNotificationHandler(handler: CodexServerNotificationHandler): () => void {
     this.notificationHandlers.add(handler);
     return () => this.notificationHandlers.delete(handler);
   }
 
+  /** Registers a callback invoked when the client closes (normally or due to subprocess exit). */
   addCloseHandler(handler: (client: CodexAppServerClient) => void): () => void {
     this.closeHandlers.add(handler);
     return () => this.closeHandlers.delete(handler);
   }
 
+  /**
+   * Rejects every in-flight request, fires close handlers, and terminates
+   * the transport. Idempotent.
+   */
   close(): void {
     if (this.closed) {
       return;
@@ -313,6 +365,11 @@ export class CodexAppServerClient {
   }
 }
 
+/**
+ * Default reply used when no registered handler answers a server-request.
+ * Returns a polite decline for approvals / tool calls / elicitation, and
+ * an empty object for anything else.
+ */
 export function defaultServerRequestResponse(
   request: Required<Pick<RpcRequest, "id" | "method">> & { params?: JsonValue },
 ): JsonValue {
@@ -365,6 +422,7 @@ function assertSupportedCodexAppServerVersion(response: CodexInitializeResponse)
   }
 }
 
+/** Extracts the semver prefix from a `name/<version> ...` user agent string. */
 export function readCodexVersionFromUserAgent(userAgent: string | undefined): string | undefined {
   const match = userAgent?.match(
     /^[^/]+\/(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)(?:[\s(]|$)/,
@@ -392,6 +450,7 @@ function numericVersionParts(version: string): number[] {
     .map((part) => (Number.isFinite(part) ? part : 0));
 }
 
+/** True when the method name looks like a Codex approval server-request. */
 export function isCodexAppServerApprovalRequest(method: string): boolean {
   return method.includes("requestApproval") || method.includes("Approval");
 }

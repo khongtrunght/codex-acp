@@ -18,17 +18,27 @@ import type {
 } from "./app-server/protocol.ts";
 import { mapItemToToolCall, toolStatusFromItem } from "./tool-mapping.ts";
 
+/** Resolution value for a completed (or interrupted) turn. */
 export type TurnOutcome = {
   stopReason: StopReason;
   turnId: string;
 };
 
+/** Pending turn state tracked by the projector between prompt and turn/completed. */
 export type ActiveTurn = {
   turnId: string;
   resolve: (outcome: TurnOutcome) => void;
   reject: (error: unknown) => void;
 };
 
+/**
+ * Translates Codex app-server notifications into ACP `session/update`
+ * messages.
+ *
+ * Holds per-turn state (plan deltas, terminal processes, active turn
+ * waiter). Instances are created per {@link CodexSession} and filter
+ * incoming notifications so they never leak across threads.
+ */
 export class EventProjector {
   private readonly connection: AgentSideConnection;
   private readonly sessionId: string;
@@ -43,6 +53,7 @@ export class EventProjector {
     this.threadId = threadId;
   }
 
+  /** Records the turn waiter. Throws if a turn is already active. */
   registerTurn(turn: ActiveTurn): void {
     if (this.activeTurn) {
       throw new Error("Another turn is already active for this session.");
@@ -50,14 +61,20 @@ export class EventProjector {
     this.activeTurn = turn;
   }
 
+  /** Drops the turn waiter without resolving it. Rarely needed. */
   clearTurn(): void {
     this.activeTurn = null;
   }
 
+  /** Active turn ID or `null` when no turn is in flight. */
   get currentTurnId(): string | null {
     return this.activeTurn?.turnId ?? null;
   }
 
+  /**
+   * Resolves the active turn with the given reason (default `"cancelled"`)
+   * and clears it. No-op if no turn is active.
+   */
   cancelActiveTurn(reason: StopReason = "cancelled"): void {
     if (!this.activeTurn) {
       return;
@@ -67,6 +84,11 @@ export class EventProjector {
     turn.resolve({ stopReason: reason, turnId: turn.turnId });
   }
 
+  /**
+   * Dispatches a Codex notification to the matching handler. Unknown
+   * notification methods are ignored. Callers should gate by thread ID
+   * before calling this (see {@link CodexSession}).
+   */
   async handle(notification: CodexServerNotification): Promise<void> {
     switch (notification.method) {
       case "item/agentMessage/delta":

@@ -11,10 +11,16 @@ export type CodexAppServerThreadBinding = {
   updatedAt: string;
 };
 
+/** Path to the sidecar binding file that pairs an ACP session file with a Codex thread. */
 export function resolveCodexAppServerBindingPath(sessionFile: string): string {
   return `${sessionFile}.codex-app-server.json`;
 }
 
+/**
+ * Reads the sidecar binding written by {@link writeCodexAppServerBinding}.
+ * Returns `undefined` when the file is missing, unreadable, or its
+ * schemaVersion doesn't match.
+ */
 export async function readCodexAppServerBinding(
   sessionFile: string,
 ): Promise<CodexAppServerThreadBinding | undefined> {
@@ -49,6 +55,11 @@ export async function readCodexAppServerBinding(
   }
 }
 
+/**
+ * Persists (or refreshes) the binding for a session file. `createdAt`
+ * falls back to the current time when not supplied; `updatedAt` is always
+ * rewritten to now.
+ */
 export async function writeCodexAppServerBinding(
   sessionFile: string,
   binding: Omit<
@@ -72,6 +83,7 @@ export async function writeCodexAppServerBinding(
   );
 }
 
+/** Removes the binding file. A missing file is not an error. */
 export async function clearCodexAppServerBinding(sessionFile: string): Promise<void> {
   try {
     await fs.unlink(resolveCodexAppServerBindingPath(sessionFile));

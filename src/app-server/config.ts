@@ -14,6 +14,16 @@ export type CodexAppServerRuntimeOptions = {
   sandbox: CodexAppServerSandboxMode;
 };
 
+/**
+ * Builds runtime options (binary, args, timeouts, defaults) from
+ * environment variables:
+ *
+ *  - `CODEX_BIN` — codex executable path (default `"codex"`)
+ *  - `CODEX_ACP_APP_SERVER_ARGS` — extra args (shell-word split)
+ *  - `CODEX_ACP_REQUEST_TIMEOUT_MS` — per-request timeout
+ *  - `CODEX_ACP_APPROVAL_POLICY` — default approval policy
+ *  - `CODEX_ACP_SANDBOX` — default sandbox mode
+ */
 export function resolveCodexAppServerRuntimeOptions(
   env: NodeJS.ProcessEnv = process.env,
 ): CodexAppServerRuntimeOptions {
@@ -31,6 +41,11 @@ export function resolveCodexAppServerRuntimeOptions(
   };
 }
 
+/**
+ * Deterministic string key for a set of start options. Two options with
+ * the same command, args, and headers (regardless of header insertion
+ * order) produce the same key, so the shared-client cache can compare them.
+ */
 export function codexAppServerStartOptionsKey(options: CodexAppServerStartOptions): string {
   return JSON.stringify({
     command: options.command,

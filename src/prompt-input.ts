@@ -4,6 +4,22 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { CodexUserInput } from "./app-server/protocol.ts";
 
+/**
+ * Converts an ACP `session/prompt` body into Codex `UserInput` entries for
+ * `turn/start`.
+ *
+ * - `text` passes through verbatim.
+ * - `resource_link` and embedded `resource` contents fold into text
+ *   with the URI prefixed so Codex has the reference point.
+ * - `image` accepts http(s) URLs, `data:image/...` URIs, and raw base64
+ *   payloads; base64 inputs are written to a temp file and sent as
+ *   `localImage` because Codex expects a path.
+ * - `audio` has no Codex equivalent yet, so it is rendered as a text
+ *   placeholder noting the mime type and payload size.
+ *
+ * Guarantees at least one input block (an empty text block) so `turn/start`
+ * always has content.
+ */
 export async function promptToCodexInput(prompt: PromptRequest): Promise<CodexUserInput[]> {
   const input: CodexUserInput[] = [];
 

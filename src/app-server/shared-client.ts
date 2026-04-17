@@ -20,6 +20,16 @@ function getState(): SharedClientState {
   return globalState[STATE_SYMBOL];
 }
 
+/**
+ * Returns the shared {@link CodexAppServerClient}, spawning the codex
+ * subprocess on first call.
+ *
+ * Shared state is keyed by startup options (command, args, headers), so
+ * callers with the same config reuse the same subprocess. If the options
+ * differ from the currently cached client, the old one is closed before a
+ * new one is spawned. The initial handshake is memoized so concurrent
+ * callers await the same promise; a failed startup is not cached.
+ */
 export async function getSharedCodexAppServerClient(options?: {
   startOptions?: CodexAppServerStartOptions;
   timeoutMs?: number;
@@ -55,6 +65,12 @@ export async function getSharedCodexAppServerClient(options?: {
   }
 }
 
+/**
+ * Spawns a fresh, non-shared {@link CodexAppServerClient}. Caller owns the
+ * returned client and must close it. Used when isolation from other
+ * sessions matters (e.g. one-off RPCs that shouldn't share notification
+ * handlers).
+ */
 export async function createIsolatedCodexAppServerClient(options?: {
   startOptions?: CodexAppServerStartOptions;
   timeoutMs?: number;
@@ -72,6 +88,10 @@ export async function createIsolatedCodexAppServerClient(options?: {
   }
 }
 
+/**
+ * Tears down the shared client (if any) and resets the cache. Next call to
+ * {@link getSharedCodexAppServerClient} spawns a new subprocess.
+ */
 export function clearSharedCodexAppServerClient(): void {
   const state = getState();
   const client = state.client;
@@ -81,6 +101,10 @@ export function clearSharedCodexAppServerClient(): void {
   client?.close();
 }
 
+/**
+ * Test escape hatch: drops shared state without closing the client. Use
+ * {@link clearSharedCodexAppServerClient} in production paths.
+ */
 export function resetSharedCodexAppServerClientForTests(): void {
   const state = getState();
   state.client = undefined;

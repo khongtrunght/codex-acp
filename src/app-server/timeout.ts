@@ -1,3 +1,8 @@
+/**
+ * Races `promise` against a timer. Rejects with `new Error(timeoutMessage)`
+ * if `timeoutMs` elapses first. A non-positive or non-finite `timeoutMs`
+ * disables the timeout.
+ */
 export async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,

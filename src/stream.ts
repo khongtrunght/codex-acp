@@ -1,3 +1,4 @@
+/** Wraps a Node writable stream as a standard Web `WritableStream`. */
 export function nodeToWebWritable(nodeStream: NodeJS.WritableStream): WritableStream<Uint8Array> {
   return new WritableStream<Uint8Array>({
     write(chunk) {
@@ -14,6 +15,7 @@ export function nodeToWebWritable(nodeStream: NodeJS.WritableStream): WritableSt
   });
 }
 
+/** Wraps a Node readable stream as a standard Web `ReadableStream`. */
 export function nodeToWebReadable(nodeStream: NodeJS.ReadableStream): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     start(controller) {

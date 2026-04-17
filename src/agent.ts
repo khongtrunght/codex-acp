@@ -58,6 +58,22 @@ import type {
   ThreadStartResponse,
 } from "./app-server/protocol.ts";
 
+/**
+ * ACP agent that bridges an ACP client to the `codex app-server` JSON-RPC
+ * protocol.
+ *
+ * Owns:
+ *  - A single shared {@link CodexAppServerClient} (one subprocess for the
+ *    whole bridge, shared across sessions).
+ *  - A map of ACP session IDs to {@link CodexSession} instances, each of
+ *    which wraps one Codex thread.
+ *  - The model list, cached per ACP connection.
+ *  - Extension-method capability flag and the shared {@link ApprovalBridge}.
+ *
+ * Lifecycle: constructed once per ACP connection. `initialize` records
+ * client capabilities; `connection.signal` abort triggers `shutdown()`,
+ * which closes every session and terminates the shared codex subprocess.
+ */
 export class CodexAcpAgent implements Agent {
   private readonly sessions = new Map<string, CodexSession>();
   private readonly connection: AgentSideConnection;
@@ -73,6 +89,11 @@ export class CodexAcpAgent implements Agent {
     this.approvals = new ApprovalBridge(connection);
   }
 
+  /**
+   * ACP `initialize`. Records whether the client opted into the bridge's
+   * extension methods (via `clientCapabilities._meta["codex-extension-methods"]`)
+   * and advertises the bridge's session capabilities (list/close/resume/fork).
+   */
   async initialize(request: InitializeRequest): Promise<InitializeResponse> {
     this.installLifecycleHooks();
     const extensionsEnabled =
@@ -112,6 +133,12 @@ export class CodexAcpAgent implements Agent {
     return;
   }
 
+  /**
+   * ACP `session/new`. Issues `thread/start` on the shared codex client and
+   * registers a new {@link CodexSession}. Honors `_meta.systemPrompt`
+   * (string → `baseInstructions`; `{ append }` → `developerInstructions`)
+   * and projects ACP MCP servers into `config.mcp_servers` on the thread.
+   */
   async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
     const { client, models } = await this.acquireClientAndModels();
     const startResponse = await client.request<ThreadStartResponse>("thread/start", {
@@ -150,6 +177,15 @@ export class CodexAcpAgent implements Agent {
     };
   }
 
+  /**
+   * ACP `session/load`. Dedupes: if the session is already tracked in this
+   * connection, returns its current state without re-issuing `thread/resume`.
+   * Otherwise resumes the thread, attaches a {@link CodexSession}, and
+   * replays the thread history as ACP session updates.
+   *
+   * Note: Codex freezes instructions at thread creation, so `_meta.systemPrompt`
+   * is ignored here (the thread keeps whatever prompt it was created with).
+   */
   async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
     const existing = this.sessions.get(params.sessionId);
     if (existing) {
@@ -193,6 +229,10 @@ export class CodexAcpAgent implements Agent {
     };
   }
 
+  /**
+   * ACP `session/resume` (unstable). Like `loadSession` but without history
+   * replay — intended for clients that already rendered prior content.
+   */
   async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
     const existing = this.sessions.get(params.sessionId);
     if (existing) {
@@ -235,6 +275,12 @@ export class CodexAcpAgent implements Agent {
     };
   }
 
+  /**
+   * ACP `session/fork` (unstable). Issues `thread/fork` against an existing
+   * Codex thread; the new thread gets a fresh ID but inherits the parent's
+   * history up to the fork point. Honors `_meta.systemPrompt` since fork
+   * creates a new thread.
+   */
   async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
     const { client, models } = await this.acquireClientAndModels();
     const forkResponse = await client.request<ThreadForkResponse>("thread/fork", {
@@ -271,6 +317,11 @@ export class CodexAcpAgent implements Agent {
     };
   }
 
+  /**
+   * ACP `session/list`. Reads every thread Codex knows about (optionally
+   * filtered by `cwd`). Uses the shared client, so it does not spawn an
+   * extra codex subprocess.
+   */
   async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
     const client = await getSharedCodexAppServerClient();
     const response = await client.request<ThreadListResponse>("thread/list", {
@@ -294,14 +345,27 @@ export class CodexAcpAgent implements Agent {
     };
   }
 
+  /**
+   * ACP `session/prompt`. Delegates to the session's `prompt` method, which
+   * sends `turn/start` and awaits `turn/completed` (or interruption).
+   */
   async prompt(params: PromptRequest): Promise<PromptResponse> {
     return this.requireSession(params.sessionId).prompt(params);
   }
 
+  /**
+   * ACP `session/cancel`. Sends `turn/interrupt` to Codex if a turn is
+   * active. Safe to call when no turn is running.
+   */
   async cancel(params: CancelNotification): Promise<void> {
     await this.requireSession(params.sessionId).cancel();
   }
 
+  /**
+   * ACP `session/close` (unstable). Unregisters the session's handlers on
+   * the shared client and cancels any active turn. Does NOT close the shared
+   * client — other sessions may still be using it.
+   */
   async unstable_closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
     const session = this.sessions.get(params.sessionId);
     if (!session) {
@@ -368,6 +432,10 @@ export class CodexAcpAgent implements Agent {
     });
   }
 
+  /**
+   * Tears down every active session and clears the shared client so the
+   * codex subprocess exits. Invoked when the ACP connection aborts.
+   */
   private async shutdown(): Promise<void> {
     if (this.closed) {
       return;
@@ -380,6 +448,11 @@ export class CodexAcpAgent implements Agent {
     clearSharedCodexAppServerClient();
   }
 
+  /**
+   * Returns the shared codex client and the cached model list. The model
+   * list is fetched lazily on first call and reused across every session in
+   * this connection; a failed fetch is not cached, so the next call retries.
+   */
   private async acquireClientAndModels(): Promise<{
     client: CodexAppServerClient;
     models: SessionModelState;

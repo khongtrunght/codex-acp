@@ -1,6 +1,13 @@
 import type { McpServer } from "@agentclientprotocol/sdk";
 import type { JsonObject } from "./app-server/protocol.ts";
 
+/**
+ * Maps ACP `mcpServers` into a Codex thread-config fragment of the form
+ * `{ mcp_servers: {...} }`. Stdio servers become `{ command, args, env }`;
+ * http/sse servers become `{ url, http_headers }`. Returns `undefined`
+ * when there are no servers, so callers can spread the result only when
+ * present.
+ */
 export function buildThreadConfigFromAcpMcpServers(
   mcpServers: McpServer[] | undefined,
 ): JsonObject | undefined {
@@ -46,6 +53,10 @@ export function buildThreadConfigFromAcpMcpServers(
   return { mcp_servers: codexMcpServers };
 }
 
+/**
+ * Collapses whitespace to underscores and returns a non-empty name. Used
+ * because Codex keys MCP server entries by name, so spaces need cleanup.
+ */
 export function sanitizeMcpServerName(name: string): string {
   const trimmed = name.trim().replace(/\s+/g, "_");
   return trimmed.length > 0 ? trimmed : "mcp_server";
