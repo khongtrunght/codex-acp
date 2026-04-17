@@ -31,8 +31,12 @@ import type {
   SetSessionModelResponse,
 } from "@agentclientprotocol/sdk";
 import { ApprovalBridge } from "./approval-bridge.ts";
-import { CodexAppServerClient } from "./app-server/client.ts";
+import type { CodexAppServerClient } from "./app-server/client.ts";
 import type { JsonObject } from "./app-server/protocol.ts";
+import {
+  clearSharedCodexAppServerClient,
+  getSharedCodexAppServerClient,
+} from "./app-server/shared-client.ts";
 import { sendAvailableCommandsUpdate } from "./available-commands.ts";
 import {
   DEFAULT_APPROVAL_POLICY,
@@ -60,6 +64,7 @@ export class CodexAcpAgent implements Agent {
   private lifecycleHooksInstalled = false;
   private extensions: ExtensionClient;
   private readonly approvals: ApprovalBridge;
+  private modelsPromise: Promise<SessionModelState> | null = null;
 
   constructor(connection: AgentSideConnection) {
     this.connection = connection;
@@ -107,7 +112,7 @@ export class CodexAcpAgent implements Agent {
   }
 
   async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
-    const { client, models } = await this.startClientAndLoadModels();
+    const { client, models } = await this.acquireClientAndModels();
     const startResponse = await client.request<ThreadStartResponse>("thread/start", {
       cwd: params.cwd,
       approvalPolicy: DEFAULT_APPROVAL_POLICY,
@@ -144,7 +149,16 @@ export class CodexAcpAgent implements Agent {
   }
 
   async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
-    const { client, models } = await this.startClientAndLoadModels();
+    const existing = this.sessions.get(params.sessionId);
+    if (existing) {
+      return {
+        modes: existing.modes,
+        models: existing.models,
+        configOptions: existing.configOptions,
+      };
+    }
+
+    const { client, models } = await this.acquireClientAndModels();
     const resumeResponse = await client.request<ThreadResumeResponse>("thread/resume", {
       threadId: params.sessionId,
       cwd: params.cwd,
@@ -178,7 +192,16 @@ export class CodexAcpAgent implements Agent {
   }
 
   async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
-    const { client, models } = await this.startClientAndLoadModels();
+    const existing = this.sessions.get(params.sessionId);
+    if (existing) {
+      return {
+        modes: existing.modes,
+        models: existing.models,
+        configOptions: existing.configOptions,
+      };
+    }
+
+    const { client, models } = await this.acquireClientAndModels();
     const resumeResponse = await client.request<ThreadResumeResponse>("thread/resume", {
       threadId: params.sessionId,
       cwd: params.cwd,
@@ -211,7 +234,7 @@ export class CodexAcpAgent implements Agent {
   }
 
   async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
-    const { client, models } = await this.startClientAndLoadModels();
+    const { client, models } = await this.acquireClientAndModels();
     const forkResponse = await client.request<ThreadForkResponse>("thread/fork", {
       threadId: params.sessionId,
       cwd: params.cwd,
@@ -246,31 +269,26 @@ export class CodexAcpAgent implements Agent {
   }
 
   async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
-    const client = CodexAppServerClient.start();
-    try {
-      await client.initialize();
-      const response = await client.request<ThreadListResponse>("thread/list", {
-        cursor: params.cursor ?? null,
-        cwd: params.cwd ?? null,
-      });
+    const client = await getSharedCodexAppServerClient();
+    const response = await client.request<ThreadListResponse>("thread/list", {
+      cursor: params.cursor ?? null,
+      cwd: params.cwd ?? null,
+    });
 
-      const sessions: SessionInfo[] = (response.data ?? []).map((thread) => ({
-        sessionId: thread.id,
-        cwd: thread.cwd ?? "",
-        title: thread.name ?? toSessionTitle(thread.preview),
-        updatedAt:
-          typeof thread.updatedAt === "number"
-            ? new Date(thread.updatedAt * 1000).toISOString()
-            : undefined,
-      }));
+    const sessions: SessionInfo[] = (response.data ?? []).map((thread) => ({
+      sessionId: thread.id,
+      cwd: thread.cwd ?? "",
+      title: thread.name ?? toSessionTitle(thread.preview),
+      updatedAt:
+        typeof thread.updatedAt === "number"
+          ? new Date(thread.updatedAt * 1000).toISOString()
+          : undefined,
+    }));
 
-      return {
-        sessions,
-        nextCursor: response.nextCursor ?? null,
-      };
-    } finally {
-      client.close();
-    }
+    return {
+      sessions,
+      nextCursor: response.nextCursor ?? null,
+    };
   }
 
   async prompt(params: PromptRequest): Promise<PromptResponse> {
@@ -343,11 +361,11 @@ export class CodexAcpAgent implements Agent {
     }
     this.lifecycleHooksInstalled = true;
     this.connection.signal.addEventListener("abort", () => {
-      void this.closeAllSessions();
+      void this.shutdown();
     });
   }
 
-  private async closeAllSessions(): Promise<void> {
+  private async shutdown(): Promise<void> {
     if (this.closed) {
       return;
     }
@@ -355,21 +373,22 @@ export class CodexAcpAgent implements Agent {
     const sessions = Array.from(this.sessions.values());
     this.sessions.clear();
     await Promise.all(sessions.map((session) => session.close()));
+    this.modelsPromise = null;
+    clearSharedCodexAppServerClient();
   }
 
-  private async startClientAndLoadModels(): Promise<{
+  private async acquireClientAndModels(): Promise<{
     client: CodexAppServerClient;
     models: SessionModelState;
   }> {
-    const client = CodexAppServerClient.start();
-    try {
-      await client.initialize();
-      const models = await loadModelState(client);
-      return { client, models };
-    } catch (error) {
-      client.close();
+    const client = await getSharedCodexAppServerClient();
+    this.modelsPromise ??= loadModelState(client).catch((error) => {
+      // Don't cache a failed lookup; the next call retries.
+      this.modelsPromise = null;
       throw error;
-    }
+    });
+    const models = await this.modelsPromise;
+    return { client, models };
   }
 
   private threadConfigOrUndefined(

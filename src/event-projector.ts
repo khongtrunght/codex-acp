@@ -32,13 +32,15 @@ export type ActiveTurn = {
 export class EventProjector {
   private readonly connection: AgentSideConnection;
   private readonly sessionId: string;
+  private readonly threadId: string | undefined;
   private readonly planDeltaByItemId = new Map<string, string>();
   private readonly terminalProcessByItemId = new Map<string, string>();
   private activeTurn: ActiveTurn | null = null;
 
-  constructor(connection: AgentSideConnection, sessionId: string) {
+  constructor(connection: AgentSideConnection, sessionId: string, threadId?: string) {
     this.connection = connection;
     this.sessionId = sessionId;
+    this.threadId = threadId;
   }
 
   registerTurn(turn: ActiveTurn): void {

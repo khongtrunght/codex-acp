@@ -13,6 +13,7 @@ import type { CodexAppServerClient } from "./app-server/client.ts";
 import { logger } from "./app-server/logger.ts";
 import type {
   ApplyPatchApprovalParams,
+  CodexServerNotification,
   CommandExecutionRequestApprovalParams,
   DynamicToolCallParams,
   ExecCommandApprovalParams,
@@ -24,6 +25,7 @@ import type {
   ToolRequestUserInputParams,
   TurnStartResponse,
 } from "./app-server/protocol.ts";
+import { isJsonObject } from "./app-server/protocol.ts";
 import { EventProjector, type TurnOutcome } from "./event-projector.ts";
 import {
   CODEX_EXTENSION_METHODS,
@@ -59,6 +61,9 @@ export class CodexSession {
   private readonly projector: EventProjector;
   private readonly extensions: ExtensionClient;
   private readonly approvals: ApprovalBridge;
+  private readonly disposeNotificationHandler: () => void;
+  private readonly disposeRequestHandler: () => void;
+  private closed = false;
 
   private modelsState: SessionModelState;
   private modesState: SessionModeState;
@@ -77,10 +82,15 @@ export class CodexSession {
     this.modesState = buildModeState(currentModeId);
     this.modelsState = options.models;
     this.configOptionsState = buildConfigOptions(this.modesState, this.modelsState);
-    this.projector = new EventProjector(this.connection, this.sessionId);
+    this.projector = new EventProjector(this.connection, this.sessionId, this.threadId);
 
-    this.client.addNotificationHandler((notification) => this.projector.handle(notification));
-    this.client.addRequestHandler(async (request) => {
+    this.disposeNotificationHandler = this.client.addNotificationHandler((notification) =>
+      this.routeNotification(notification),
+    );
+    this.disposeRequestHandler = this.client.addRequestHandler(async (request) => {
+      if (!this.isForThisThread(request.params)) {
+        return undefined;
+      }
       const result = await this.handleServerRequest(request);
       return result as JsonValue | undefined;
     });
@@ -171,8 +181,34 @@ export class CodexSession {
   }
 
   async close(): Promise<void> {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+    this.disposeNotificationHandler();
+    this.disposeRequestHandler();
     this.projector.cancelActiveTurn("cancelled");
-    this.client.close();
+  }
+
+  private routeNotification(notification: CodexServerNotification): Promise<void> | void {
+    if (!this.isForThisThread(notification.params)) {
+      return;
+    }
+    return this.projector.handle(notification);
+  }
+
+  private isForThisThread(params: JsonValue | undefined): boolean {
+    if (!isJsonObject(params)) {
+      // Some top-level notifications carry no threadId (e.g. account updates).
+      // Let every session see them; handlers that only care about a specific
+      // thread already short-circuit internally.
+      return true;
+    }
+    const threadId = params.threadId;
+    if (typeof threadId !== "string") {
+      return true;
+    }
+    return threadId === this.threadId;
   }
 
   private async handleServerRequest(request: CodexServerRequest): Promise<unknown> {
@@ -212,10 +248,8 @@ export class CodexSession {
         );
       case "account/chatgptAuthTokens/refresh":
         return {};
-      default: {
-        const unknownRequest = request as { method: string };
-        throw new Error(`Unsupported server request: ${unknownRequest.method}`);
-      }
+      default:
+        return undefined;
     }
   }
 
