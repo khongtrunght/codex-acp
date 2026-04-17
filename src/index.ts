@@ -16,6 +16,13 @@ if (args.includes("--help") || args.includes("-h")) {
       "  -h, --help     Show this help",
       "  -v, --version  Show version",
       "",
+      "Environment:",
+      "  CODEX_BIN                       codex binary (default: codex)",
+      "  CODEX_ACP_APP_SERVER_ARGS       extra args for codex app-server (shell-split)",
+      "  CODEX_ACP_REQUEST_TIMEOUT_MS    per-request timeout (default: 60000)",
+      "  CODEX_ACP_APPROVAL_POLICY       default approval policy",
+      "  CODEX_ACP_SANDBOX               default sandbox mode",
+      "",
     ].join("\n"),
   );
   process.exit(0);
