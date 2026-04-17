@@ -67,6 +67,16 @@ To enable extension calls, client should advertise capability:
 
 - `initialize.clientCapabilities._meta["codex-extension-methods"] = true`
 
+### Custom system prompt
+
+`session/new` and `session/fork` accept a system prompt through `_meta.systemPrompt` (mirrors the claude-agent-acp API):
+
+- `_meta.systemPrompt: "..."` — replaces the preset (mapped to Codex `baseInstructions`)
+- `_meta.systemPrompt: { append: "..." }` — extra instructions on top of the preset (mapped to Codex `developerInstructions`)
+- `_meta.systemPrompt: { base: "...", append: "..." }` — both fields at once
+
+Codex locks instructions at thread creation time, so this has no effect on `session/load` or `session/resume` (the existing thread keeps whatever prompt it was created with).
+
 ## Quick sanity test
 
 ```bash

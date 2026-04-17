@@ -47,6 +47,7 @@ import { CLIENT_EXTENSION_CAPABILITY_KEY, ExtensionClient } from "./extension.ts
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./meta.ts";
 import { loadModelState } from "./modes.ts";
 import { CodexSession } from "./session-manager.ts";
+import { resolveSystemPromptFields } from "./system-prompt.ts";
 import { buildThreadConfigFromAcpMcpServers } from "./thread-config.ts";
 import { replayThreadHistory } from "./thread-replay.ts";
 import { toSessionTitle } from "./tool-mapping.ts";
@@ -120,6 +121,7 @@ export class CodexAcpAgent implements Agent {
       experimentalRawEvents: false,
       persistExtendedHistory: DEFAULT_PERSIST_EXTENDED_HISTORY,
       model: models.currentModelId,
+      ...resolveSystemPromptFields(params._meta),
       ...(this.threadConfigOrUndefined(params.mcpServers) ?? {}),
     });
 
@@ -240,6 +242,7 @@ export class CodexAcpAgent implements Agent {
       cwd: params.cwd,
       persistExtendedHistory: true,
       model: models.currentModelId,
+      ...resolveSystemPromptFields(params._meta),
       ...(this.threadConfigOrUndefined(params.mcpServers) ?? {}),
     });
 
