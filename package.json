@@ -1,6 +1,6 @@
 {
   "name": "codex-acp",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "ACP bridge for the Codex app-server. Run Codex from any ACP-compatible client.",
   "license": "Apache-2.0",
   "author": "khongtrunght",
