@@ -71,7 +71,7 @@
     "build:binary:all": "bun run build:binary:darwin-arm64 && bun run build:binary:darwin-x64 && bun run build:binary:linux-x64 && bun run build:binary:linux-arm64 && bun run build:binary:windows-x64"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "0.18.1"
+    "@agentclientprotocol/sdk": "0.19.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
