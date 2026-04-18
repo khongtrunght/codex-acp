@@ -77,20 +77,20 @@ jobs:
       matrix:
         include:
           - target: bun-linux-x64
-            artifact: codex-acp-bridge
-            archive: codex-acp-bridge-linux-x64.tar.gz
+            artifact: codex-acp
+            archive: codex-acp-linux-x64.tar.gz
           - target: bun-linux-arm64
-            artifact: codex-acp-bridge
-            archive: codex-acp-bridge-linux-arm64.tar.gz
+            artifact: codex-acp
+            archive: codex-acp-linux-arm64.tar.gz
           - target: bun-darwin-x64
-            artifact: codex-acp-bridge
-            archive: codex-acp-bridge-darwin-x64.zip
+            artifact: codex-acp
+            archive: codex-acp-darwin-x64.zip
           - target: bun-darwin-arm64
-            artifact: codex-acp-bridge
-            archive: codex-acp-bridge-darwin-arm64.zip
+            artifact: codex-acp
+            archive: codex-acp-darwin-arm64.zip
           - target: bun-windows-x64
-            artifact: codex-acp-bridge.exe
-            archive: codex-acp-bridge-windows-x64.zip
+            artifact: codex-acp.exe
+            archive: codex-acp-windows-x64.zip
 
     steps:
       - uses: actions/checkout@v4

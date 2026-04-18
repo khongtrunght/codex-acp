@@ -26,7 +26,7 @@ function withTimeout(promise, ms, label) {
 }
 
 async function main() {
-  // Allow smoke-testing a compiled binary: BRIDGE_BIN=dist/codex-acp-bridge.
+  // Allow smoke-testing a compiled binary: BRIDGE_BIN=dist/codex-acp.
   const bridgeBin = process.env.BRIDGE_BIN;
   const [cmd, args] = bridgeBin ? [bridgeBin, []] : ["bun", ["run", "src/index.ts"]];
   const bridge = spawn(cmd, args, { stdio: ["pipe", "pipe", "inherit"] });

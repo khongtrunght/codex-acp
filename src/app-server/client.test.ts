@@ -442,7 +442,7 @@ describe("helper predicates", () => {
   });
 
   test("extracts semver version from user agent", () => {
-    expect(readCodexVersionFromUserAgent("codex-acp-bridge/0.1.0 (node 21)")).toBe("0.1.0");
+    expect(readCodexVersionFromUserAgent("codex-acp/0.1.0 (node 21)")).toBe("0.1.0");
     expect(readCodexVersionFromUserAgent("codex_cli_rs/0.118.1-dev (linux; test)")).toBe(
       "0.118.1-dev",
     );

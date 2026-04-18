@@ -1,4 +1,4 @@
-# codex-acp-bridge
+# codex-acp
 
 TypeScript ACP adapter that bridges ACP clients to `codex app-server` over JSON-RPC stdio.
 
@@ -41,7 +41,7 @@ Or as a bin:
 
 ```bash
 bun run start
-# command name: codex-acp-bridge
+# command name: codex-acp
 ```
 
 Optional environment variable:
@@ -92,7 +92,7 @@ bun run smoke
 `bun build --compile` bundles the bridge into a single native executable (Bun runtime included, no `node`/`bun` required at runtime):
 
 ```bash
-# host platform → dist/codex-acp-bridge
+# host platform → dist/codex-acp
 bun run build:binary
 
 # cross-compile targets
@@ -106,7 +106,7 @@ bun run build:binary:windows-x64
 bun run build:binary:all
 ```
 
-Smoke-test a compiled binary with `BRIDGE_BIN=./dist/codex-acp-bridge bun run smoke`.
+Smoke-test a compiled binary with `BRIDGE_BIN=./dist/codex-acp bun run smoke`.
 
 Implementation is modularized under `src/` (`agent`, `rpc`, `mapping`, `main`), with `src/index.ts` as the executable entrypoint (same style as `mission-agent-acp`).
 

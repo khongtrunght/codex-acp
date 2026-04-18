@@ -1,5 +1,5 @@
 {
-  "name": "codex-acp-bridge",
+  "name": "codex-acp",
   "version": "0.1.0",
   "description": "ACP bridge for the Codex app-server. Run Codex from any ACP-compatible client.",
   "license": "Apache-2.0",
@@ -32,7 +32,7 @@
     }
   },
   "bin": {
-    "codex-acp-bridge": "dist/index.js"
+    "codex-acp": "dist/index.js"
   },
   "files": [
     "dist/",
@@ -62,12 +62,12 @@
     "smoke": "node scripts/smoke-acp.mjs",
     "build": "node scripts/build-npm.mjs",
     "prepublishOnly": "bun run check && bun run test && bun run build",
-    "build:binary": "bun build --compile --minify --sourcemap src/index.ts --outfile dist/codex-acp-bridge",
-    "build:binary:darwin-arm64": "bun build --compile --minify --sourcemap --target bun-darwin-arm64 src/index.ts --outfile dist/codex-acp-bridge-darwin-arm64",
-    "build:binary:darwin-x64": "bun build --compile --minify --sourcemap --target bun-darwin-x64 src/index.ts --outfile dist/codex-acp-bridge-darwin-x64",
-    "build:binary:linux-x64": "bun build --compile --minify --sourcemap --target bun-linux-x64 src/index.ts --outfile dist/codex-acp-bridge-linux-x64",
-    "build:binary:linux-arm64": "bun build --compile --minify --sourcemap --target bun-linux-arm64 src/index.ts --outfile dist/codex-acp-bridge-linux-arm64",
-    "build:binary:windows-x64": "bun build --compile --minify --sourcemap --target bun-windows-x64 src/index.ts --outfile dist/codex-acp-bridge-windows-x64.exe",
+    "build:binary": "bun build --compile --minify --sourcemap src/index.ts --outfile dist/codex-acp",
+    "build:binary:darwin-arm64": "bun build --compile --minify --sourcemap --target bun-darwin-arm64 src/index.ts --outfile dist/codex-acp-darwin-arm64",
+    "build:binary:darwin-x64": "bun build --compile --minify --sourcemap --target bun-darwin-x64 src/index.ts --outfile dist/codex-acp-darwin-x64",
+    "build:binary:linux-x64": "bun build --compile --minify --sourcemap --target bun-linux-x64 src/index.ts --outfile dist/codex-acp-linux-x64",
+    "build:binary:linux-arm64": "bun build --compile --minify --sourcemap --target bun-linux-arm64 src/index.ts --outfile dist/codex-acp-linux-arm64",
+    "build:binary:windows-x64": "bun build --compile --minify --sourcemap --target bun-windows-x64 src/index.ts --outfile dist/codex-acp-windows-x64.exe",
     "build:binary:all": "bun run build:binary:darwin-arm64 && bun run build:binary:darwin-x64 && bun run build:binary:linux-x64 && bun run build:binary:linux-arm64 && bun run build:binary:windows-x64"
   },
   "dependencies": {

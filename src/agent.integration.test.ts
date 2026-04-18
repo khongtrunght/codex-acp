@@ -79,7 +79,7 @@ function killBridge(child: ChildProcess): Promise<void> {
   });
 }
 
-describe.skipIf(!shouldRun)("codex-acp-bridge subprocess (integration)", () => {
+describe.skipIf(!shouldRun)("codex-acp subprocess (integration)", () => {
   let canRunCodexTests = true;
 
   beforeAll(() => {

@@ -12,7 +12,7 @@ type SharedClientState = {
   key?: string;
 };
 
-const STATE_SYMBOL = Symbol.for("codex-acp-bridge.sharedAppServerClient");
+const STATE_SYMBOL = Symbol.for("codex-acp.sharedAppServerClient");
 
 function getState(): SharedClientState {
   const globalState = globalThis as typeof globalThis & { [STATE_SYMBOL]?: SharedClientState };

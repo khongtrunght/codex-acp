@@ -100,7 +100,7 @@ async function resolveImageBlock(block: ImageBlock): Promise<CodexUserInput | un
 
 async function writePromptImageToTempFile(base64Data: string, mimeType: string): Promise<string> {
   const extension = mimeTypeToExtension(mimeType);
-  const dir = path.join(os.tmpdir(), "codex-acp-bridge-images");
+  const dir = path.join(os.tmpdir(), "codex-acp-images");
   await fs.mkdir(dir, { recursive: true });
   const filePath = path.join(
     dir,

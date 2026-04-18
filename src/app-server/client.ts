@@ -375,7 +375,7 @@ export function defaultServerRequestResponse(
       contentItems: [
         {
           type: "inputText",
-          text: "codex-acp-bridge did not register a handler for this app-server tool call.",
+          text: "codex-acp did not register a handler for this app-server tool call.",
         },
       ],
       success: false,
@@ -393,7 +393,7 @@ export function defaultServerRequestResponse(
   if (isCodexAppServerApprovalRequest(request.method)) {
     return {
       decision: "decline",
-      reason: "codex-acp-bridge did not handle this approval request.",
+      reason: "codex-acp did not handle this approval request.",
     };
   }
   if (request.method === "item/tool/requestUserInput") {

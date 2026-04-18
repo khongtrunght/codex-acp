@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Builds the npm package in dist/: JS bundles via bun build, .d.ts via tsc.
-// Rewrites the cli shebang from bun to node so `npx codex-acp-bridge` works
+// Rewrites the cli shebang from bun to node so `npx codex-acp` works
 // without requiring bun on end-user machines. Bun is still the dev runtime.
 
 import { readFile, writeFile } from "node:fs/promises";

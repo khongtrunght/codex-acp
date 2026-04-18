@@ -8,7 +8,7 @@ const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
   process.stderr.write(
     [
-      "Usage: codex-acp-bridge [options]",
+      "Usage: codex-acp [options]",
       "",
       "Runs ACP server over stdio and bridges to codex app-server.",
       "",
