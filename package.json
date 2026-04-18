@@ -4,13 +4,13 @@
   "description": "ACP bridge for the Codex app-server. Run Codex from any ACP-compatible client.",
   "license": "Apache-2.0",
   "author": "khongtrunght",
-  "homepage": "https://github.com/khongtrunght/codex-acp-bridge#readme",
+  "homepage": "https://github.com/khongtrunght/codex-acp#readme",
   "bugs": {
-    "url": "https://github.com/khongtrunght/codex-acp-bridge/issues"
+    "url": "https://github.com/khongtrunght/codex-acp/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/khongtrunght/codex-acp-bridge.git"
+    "url": "git+https://github.com/khongtrunght/codex-acp.git"
   },
   "keywords": [
     "acp",
