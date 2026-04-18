@@ -35,6 +35,7 @@ jobs:
     if: ${{ needs.release-please.outputs.release_created }}
     permissions:
       contents: read
+      # Required for npm Trusted Publishing (OIDC). No NPM_TOKEN secret needed.
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -50,6 +51,9 @@ jobs:
           node-version: "lts/*"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Upgrade npm (Trusted Publishing needs >=11.5.1)
+        run: npm install -g npm@latest
+
       - name: Install
         run: bun install --frozen-lockfile
 
@@ -58,8 +62,6 @@ jobs:
 
       - name: Publish
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   build-binaries:
     name: Build (${{ matrix.target }})
