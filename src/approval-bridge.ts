@@ -9,6 +9,9 @@ import type {
   CommandExecutionRequestApprovalParams,
   ExecCommandApprovalParams,
   FileChangeRequestApprovalParams,
+  JsonObject,
+  McpServerElicitationRequestParams,
+  McpServerElicitationRequestResponse,
   PermissionsRequestApprovalParams,
 } from "./app-server/protocol.ts";
 
@@ -20,6 +23,23 @@ type ApprovalParams = CommandExecutionRequestApprovalParams | FileChangeRequestA
 type LegacyDecision = "approved" | "approved_for_session" | "denied" | "abort";
 
 const COMMAND_DEFAULT_DECISIONS: string[] = ["accept", "acceptForSession", "decline"];
+
+// Metadata keys Codex attaches to elicitations that represent MCP tool call
+// approvals. Wire-compatible with zed-industries/codex-acp so the same client
+// UI works for both bridges. See
+// https://github.com/zed-industries/codex-acp/blob/main/src/thread.rs
+const MCP_TOOL_APPROVAL_KIND_KEY = "codex_approval_kind";
+const MCP_TOOL_APPROVAL_KIND_MCP_TOOL_CALL = "mcp_tool_call";
+const MCP_TOOL_APPROVAL_PERSIST_KEY = "persist";
+const MCP_TOOL_APPROVAL_PERSIST_SESSION = "session";
+const MCP_TOOL_APPROVAL_PERSIST_ALWAYS = "always";
+const MCP_TOOL_APPROVAL_TOOL_TITLE_KEY = "tool_title";
+const MCP_TOOL_APPROVAL_REQUEST_ID_PREFIX = "mcp_tool_call_approval_";
+
+const MCP_TOOL_APPROVAL_ALLOW_OPTION_ID = "approved";
+const MCP_TOOL_APPROVAL_ALLOW_SESSION_OPTION_ID = "approved-for-session";
+const MCP_TOOL_APPROVAL_ALLOW_ALWAYS_OPTION_ID = "approved-always";
+const MCP_TOOL_APPROVAL_CANCEL_OPTION_ID = "cancel";
 
 /**
  * Translates Codex approval server-requests into ACP `requestPermission`
@@ -135,6 +155,153 @@ export class ApprovalBridge {
     });
     return { decision: resolveLegacyDecision(response) };
   }
+
+  /**
+   * Routes an MCP-tool-call approval elicitation through ACP
+   * `requestPermission`. Only applies when the elicitation carries a `_meta`
+   * object marking it as a tool-call approval (matching Codex/Zed
+   * convention); other elicitations (generic form fill, URL launch) must be
+   * handled by the caller.
+   *
+   * Returns a ready-to-send response on success, or `undefined` if the
+   * elicitation is not a tool-call approval — the caller should then use a
+   * safe fallback such as `{ action: "decline" }`.
+   */
+  async mcpToolApproval(
+    sessionId: string,
+    params: McpServerElicitationRequestParams,
+  ): Promise<McpServerElicitationRequestResponse | undefined> {
+    const meta = params._meta ?? undefined;
+    if (!meta) {
+      return undefined;
+    }
+    if (meta[MCP_TOOL_APPROVAL_KIND_KEY] !== MCP_TOOL_APPROVAL_KIND_MCP_TOOL_CALL) {
+      return undefined;
+    }
+
+    const decisionMap = new Map<string, McpServerElicitationRequestResponse>();
+    const options = buildMcpElicitationOptions(meta, decisionMap);
+
+    const response = await this.connection.requestPermission({
+      sessionId,
+      options,
+      toolCall: {
+        toolCallId: mcpToolApprovalCallId(params),
+        title: renderMcpToolApprovalTitle(meta, params),
+        rawInput: meta,
+      },
+    });
+
+    if (response.outcome.outcome === "cancelled") {
+      return { action: "cancel", content: null, _meta: null };
+    }
+    return (
+      decisionMap.get(response.outcome.optionId) ?? {
+        action: "decline",
+        content: null,
+        _meta: null,
+      }
+    );
+  }
+}
+
+function buildMcpElicitationOptions(
+  meta: JsonObject,
+  decisionMap: Map<string, McpServerElicitationRequestResponse>,
+): PermissionOption[] {
+  const options: PermissionOption[] = [
+    { optionId: MCP_TOOL_APPROVAL_ALLOW_OPTION_ID, name: "Allow", kind: "allow_once" },
+  ];
+  decisionMap.set(MCP_TOOL_APPROVAL_ALLOW_OPTION_ID, {
+    action: "accept",
+    content: null,
+    _meta: null,
+  });
+
+  const { session, always } = readMcpToolApprovalPersistModes(meta);
+  if (session) {
+    options.push({
+      optionId: MCP_TOOL_APPROVAL_ALLOW_SESSION_OPTION_ID,
+      name: "Allow for this session",
+      kind: "allow_always",
+    });
+    decisionMap.set(MCP_TOOL_APPROVAL_ALLOW_SESSION_OPTION_ID, {
+      action: "accept",
+      content: null,
+      _meta: { [MCP_TOOL_APPROVAL_PERSIST_KEY]: MCP_TOOL_APPROVAL_PERSIST_SESSION },
+    });
+  }
+  if (always) {
+    options.push({
+      optionId: MCP_TOOL_APPROVAL_ALLOW_ALWAYS_OPTION_ID,
+      name: "Allow and don't ask again",
+      kind: "allow_always",
+    });
+    decisionMap.set(MCP_TOOL_APPROVAL_ALLOW_ALWAYS_OPTION_ID, {
+      action: "accept",
+      content: null,
+      _meta: { [MCP_TOOL_APPROVAL_PERSIST_KEY]: MCP_TOOL_APPROVAL_PERSIST_ALWAYS },
+    });
+  }
+
+  options.push({
+    optionId: MCP_TOOL_APPROVAL_CANCEL_OPTION_ID,
+    name: "Cancel",
+    kind: "reject_once",
+  });
+  decisionMap.set(MCP_TOOL_APPROVAL_CANCEL_OPTION_ID, {
+    action: "cancel",
+    content: null,
+    _meta: null,
+  });
+
+  return options;
+}
+
+function readMcpToolApprovalPersistModes(meta: JsonObject): {
+  session: boolean;
+  always: boolean;
+} {
+  const persist = meta[MCP_TOOL_APPROVAL_PERSIST_KEY];
+  if (typeof persist === "string") {
+    return {
+      session: persist === MCP_TOOL_APPROVAL_PERSIST_SESSION,
+      always: persist === MCP_TOOL_APPROVAL_PERSIST_ALWAYS,
+    };
+  }
+  if (Array.isArray(persist)) {
+    const values = persist.filter((entry): entry is string => typeof entry === "string");
+    return {
+      session: values.includes(MCP_TOOL_APPROVAL_PERSIST_SESSION),
+      always: values.includes(MCP_TOOL_APPROVAL_PERSIST_ALWAYS),
+    };
+  }
+  return { session: false, always: false };
+}
+
+function mcpToolApprovalCallId(params: McpServerElicitationRequestParams): string {
+  const elicitationId = params.elicitationId;
+  if (typeof elicitationId === "string" && elicitationId.length > 0) {
+    const stripped = elicitationId.startsWith(MCP_TOOL_APPROVAL_REQUEST_ID_PREFIX)
+      ? elicitationId.slice(MCP_TOOL_APPROVAL_REQUEST_ID_PREFIX.length)
+      : elicitationId;
+    return stripped || elicitationId;
+  }
+  return `mcp-tool-approval-${randomUUID()}`;
+}
+
+function renderMcpToolApprovalTitle(
+  meta: JsonObject,
+  params: McpServerElicitationRequestParams,
+): string {
+  const title = meta[MCP_TOOL_APPROVAL_TOOL_TITLE_KEY];
+  if (typeof title === "string" && title.trim()) {
+    return `Approve ${title.trim()}`;
+  }
+  if (params.serverName) {
+    return `Approve MCP tool call from ${params.serverName}`;
+  }
+  return "Approve MCP tool call";
 }
 
 function buildV2ApprovalOptions(

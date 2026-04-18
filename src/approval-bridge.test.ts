@@ -310,6 +310,153 @@ test("legacy applyPatchApproval maps allow_once to approved", async () => {
   expect(result.decision).toBe("approved");
 });
 
+test("mcpToolApproval returns undefined for elicitations without the tool-call marker", async () => {
+  const { connection, recorded } = fakeConnection({
+    outcome: { outcome: "selected", optionId: "approved" },
+  });
+  const bridge = new ApprovalBridge(connection);
+  const result = await bridge.mcpToolApproval("s", {
+    serverName: "docs",
+    threadId: "t",
+    mode: "form",
+    message: "Please provide an assignee",
+    _meta: { unrelated_key: "value" },
+  });
+  expect(result).toBeUndefined();
+  expect(recorded).toHaveLength(0);
+});
+
+test("mcpToolApproval returns undefined when _meta is missing", async () => {
+  const { connection } = fakeConnection({
+    outcome: { outcome: "selected", optionId: "approved" },
+  });
+  const bridge = new ApprovalBridge(connection);
+  const result = await bridge.mcpToolApproval("s", {
+    serverName: "docs",
+    threadId: "t",
+    mode: "form",
+  });
+  expect(result).toBeUndefined();
+});
+
+test("mcpToolApproval routes tool-call elicitation via requestPermission and maps Allow", async () => {
+  const { connection, recorded } = fakeConnection({
+    outcome: { outcome: "selected", optionId: "approved" },
+  });
+  const bridge = new ApprovalBridge(connection);
+  const result = await bridge.mcpToolApproval("s", {
+    serverName: "linear",
+    threadId: "t",
+    elicitationId: "mcp_tool_call_approval_abc123",
+    _meta: {
+      codex_approval_kind: "mcp_tool_call",
+      tool_title: "Linear / Create Issue",
+    },
+  });
+  expect(result).toEqual({ action: "accept", content: null, _meta: null });
+  expect(recorded).toHaveLength(1);
+  const sent = recorded[0]!.params;
+  expect(sent.toolCall.title).toBe("Approve Linear / Create Issue");
+  expect(sent.toolCall.toolCallId).toBe("abc123");
+  expect(sent.options.map((o) => o.optionId)).toEqual(["approved", "cancel"]);
+});
+
+test("mcpToolApproval adds session option when persist allows session", async () => {
+  const { connection, recorded } = fakeConnection({
+    outcome: { outcome: "selected", optionId: "approved-for-session" },
+  });
+  const bridge = new ApprovalBridge(connection);
+  const result = await bridge.mcpToolApproval("s", {
+    serverName: "linear",
+    threadId: "t",
+    _meta: {
+      codex_approval_kind: "mcp_tool_call",
+      persist: "session",
+    },
+  });
+  expect(result?.action).toBe("accept");
+  expect(result?._meta).toEqual({ persist: "session" });
+  expect(recorded[0]!.params.options.map((o) => o.optionId)).toEqual([
+    "approved",
+    "approved-for-session",
+    "cancel",
+  ]);
+});
+
+test("mcpToolApproval adds both persist options when persist is an array", async () => {
+  const { connection, recorded } = fakeConnection({
+    outcome: { outcome: "selected", optionId: "approved-always" },
+  });
+  const bridge = new ApprovalBridge(connection);
+  const result = await bridge.mcpToolApproval("s", {
+    serverName: "linear",
+    threadId: "t",
+    _meta: {
+      codex_approval_kind: "mcp_tool_call",
+      persist: ["session", "always"],
+    },
+  });
+  expect(result?._meta).toEqual({ persist: "always" });
+  expect(recorded[0]!.params.options.map((o) => o.optionId)).toEqual([
+    "approved",
+    "approved-for-session",
+    "approved-always",
+    "cancel",
+  ]);
+});
+
+test("mcpToolApproval maps cancel option to cancel decision", async () => {
+  const { connection } = fakeConnection({
+    outcome: { outcome: "selected", optionId: "cancel" },
+  });
+  const bridge = new ApprovalBridge(connection);
+  const result = await bridge.mcpToolApproval("s", {
+    serverName: "linear",
+    threadId: "t",
+    _meta: { codex_approval_kind: "mcp_tool_call" },
+  });
+  expect(result).toEqual({ action: "cancel", content: null, _meta: null });
+});
+
+test("mcpToolApproval maps cancelled outcome to cancel decision", async () => {
+  const { connection } = fakeConnection({ outcome: { outcome: "cancelled" } });
+  const bridge = new ApprovalBridge(connection);
+  const result = await bridge.mcpToolApproval("s", {
+    serverName: "linear",
+    threadId: "t",
+    _meta: { codex_approval_kind: "mcp_tool_call" },
+  });
+  expect(result?.action).toBe("cancel");
+});
+
+test("mcpToolApproval generates a toolCallId when elicitationId is missing", async () => {
+  const { connection, recorded } = fakeConnection({
+    outcome: { outcome: "selected", optionId: "approved" },
+  });
+  const bridge = new ApprovalBridge(connection);
+  await bridge.mcpToolApproval("s", {
+    serverName: "linear",
+    threadId: "t",
+    _meta: { codex_approval_kind: "mcp_tool_call" },
+  });
+  const toolCallId = recorded[0]!.params.toolCall.toolCallId;
+  expect(toolCallId.startsWith("mcp-tool-approval-")).toBe(true);
+  expect(toolCallId.length).toBeGreaterThan("mcp-tool-approval-".length);
+});
+
+test("mcpToolApproval falls back to server-name title when tool_title missing", async () => {
+  const { connection, recorded } = fakeConnection({
+    outcome: { outcome: "selected", optionId: "approved" },
+  });
+  const bridge = new ApprovalBridge(connection);
+  await bridge.mcpToolApproval("s", {
+    serverName: "linear",
+    threadId: "t",
+    _meta: { codex_approval_kind: "mcp_tool_call" },
+  });
+  expect(recorded[0]!.params.toolCall.title).toBe("Approve MCP tool call from linear");
+});
+
 test("legacy execCommandApproval maps reject_once to denied", async () => {
   const { connection } = fakeConnection({
     outcome: { outcome: "selected", optionId: "reject_once" },

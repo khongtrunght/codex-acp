@@ -356,6 +356,24 @@ export class CodexSession {
     if (extResponse && isMcpElicitationResponse(extResponse)) {
       return extResponse;
     }
+
+    // If the elicitation carries the MCP-tool-call approval _meta marker,
+    // route it through ACP requestPermission so the user can explicitly
+    // Allow / Allow-for-session / Allow-always / Cancel. Follows the same
+    // convention as zed-industries/codex-acp so clients work with both bridges.
+    const toolApproval = await this.approvals.mcpToolApproval(this.sessionId, params);
+    if (toolApproval) {
+      return toolApproval;
+    }
+
+    // Generic form elicitations (schema-driven fields) and URL elicitations
+    // have no safe ACP mapping yet. Log and decline so the MCP server sees an
+    // explicit rejection rather than a timeout.
+    logger.warn("unhandled mcpServer/elicitation/request; declining", {
+      serverName: params.serverName,
+      mode: params.mode,
+      threadId: params.threadId,
+    });
     return { action: "decline", content: null, _meta: null };
   }
 }

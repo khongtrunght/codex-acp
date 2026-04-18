@@ -209,6 +209,105 @@ test("handleToolRequestUserInput returns empty answers when extension is absent"
   }
 });
 
+test("mcpServer/elicitation/request routes tool-call approval via requestPermission", async () => {
+  const recordedPermissions: unknown[] = [];
+  const connection = {
+    sessionUpdate: async (params: SessionNotification) => {
+      harness.updates.push(params);
+    },
+    requestPermission: async (params: unknown) => {
+      recordedPermissions.push(params);
+      return { outcome: { outcome: "selected", optionId: "approved" } };
+    },
+  } as unknown as AgentSideConnection;
+
+  const session = new CodexSession({
+    sessionId: "s",
+    cwd: "/tmp",
+    threadId: "t1",
+    approvalPolicy: "on-request",
+    client: harness.client,
+    connection,
+    models: {
+      currentModelId: "gpt",
+      availableModels: [{ modelId: "gpt", name: "GPT", description: null }],
+    },
+    extensions: new ExtensionClient(connection, false),
+    approvals: new ApprovalBridge(connection),
+  });
+
+  try {
+    const result = (await harness.requestHandlers[0]?.({
+      id: 50,
+      method: "mcpServer/elicitation/request",
+      params: {
+        serverName: "linear",
+        threadId: "t1",
+        mode: "form",
+        message: "Allow Linear to create an issue?",
+        _meta: {
+          codex_approval_kind: "mcp_tool_call",
+          tool_title: "linear/create_issue",
+          persist: "session",
+        },
+      },
+    })) as { action?: string };
+
+    expect(result.action).toBe("accept");
+    expect(recordedPermissions).toHaveLength(1);
+  } finally {
+    await session.close();
+  }
+});
+
+test("mcpServer/elicitation/request declines generic form elicitations", async () => {
+  const recordedPermissions: unknown[] = [];
+  const connection = {
+    sessionUpdate: async (params: SessionNotification) => {
+      harness.updates.push(params);
+    },
+    requestPermission: async (params: unknown) => {
+      recordedPermissions.push(params);
+      return { outcome: { outcome: "cancelled" } };
+    },
+  } as unknown as AgentSideConnection;
+
+  const session = new CodexSession({
+    sessionId: "s",
+    cwd: "/tmp",
+    threadId: "t1",
+    approvalPolicy: "on-request",
+    client: harness.client,
+    connection,
+    models: {
+      currentModelId: "gpt",
+      availableModels: [{ modelId: "gpt", name: "GPT", description: null }],
+    },
+    extensions: new ExtensionClient(connection, false),
+    approvals: new ApprovalBridge(connection),
+  });
+
+  try {
+    const result = (await harness.requestHandlers[0]?.({
+      id: 51,
+      method: "mcpServer/elicitation/request",
+      params: {
+        serverName: "linear",
+        threadId: "t1",
+        mode: "form",
+        message: "Enter issue assignee",
+        requestedSchema: { type: "object", properties: { assignee: { type: "string" } } },
+      },
+    })) as { action?: string };
+
+    expect(result.action).toBe("decline");
+    // No requestPermission should fire — generic forms aren't ACP-mappable.
+    expect(recordedPermissions).toHaveLength(0);
+  } finally {
+    await session.close();
+  }
+});
+
 test("handleToolRequestUserInput uses extension response when provided", async () => {
   const connection = {
     sessionUpdate: async (params: SessionNotification) => {

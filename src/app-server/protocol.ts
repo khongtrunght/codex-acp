@@ -292,12 +292,32 @@ export type DynamicToolCallParams = {
   arguments?: unknown;
 };
 
+/**
+ * `mcpServer/elicitation/request` server-request. Schema shape per
+ * `/tmp/codex-schema/McpServerElicitationRequestParams.json`:
+ *  - required at top level: `serverName`, `threadId`
+ *  - `turnId` is a nullable string (Codex can't always correlate)
+ *  - oneOf { form | url } determines which fields are set:
+ *    - form: `mode: "form"`, `message`, `requestedSchema`, optional `_meta`
+ *    - url:  `mode: "url"`,  `elicitationId`, `message`, `url`, optional `_meta`
+ */
 export type McpServerElicitationRequestParams = {
+  serverName?: string;
   threadId?: string;
-  turnId?: string;
-  requestId?: string;
+  turnId?: string | null;
+  elicitationId?: string;
+  mode?: "form" | "url";
   message?: string;
+  url?: string;
   requestedSchema?: unknown;
+  _meta?: JsonObject | null;
+};
+
+/** Response for `mcpServer/elicitation/request`. */
+export type McpServerElicitationRequestResponse = {
+  action: "accept" | "decline" | "cancel";
+  content?: JsonValue | null;
+  _meta?: JsonValue | null;
 };
 
 // Legacy (pre-v2) approval params kept for back-compat with older Codex servers.
