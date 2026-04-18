@@ -1,89 +1,116 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { EventEmitter } from "node:events";
+import { PassThrough, Writable } from "node:stream";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   AgentSideConnection,
   SessionNotification,
 } from "@agentclientprotocol/sdk";
-import type {
-  CodexAppServerClient,
-  CodexServerNotificationHandler,
-  CodexServerRequestHandler,
-} from "./app-server/client.ts";
+import { CodexAcpAgent } from "./agent.ts";
+import { CodexAppServerClient, MIN_CODEX_APP_SERVER_VERSION } from "./app-server/client.ts";
+import type { CodexAppServerTransport } from "./app-server/transport.ts";
+import { resetSharedCodexAppServerClientForTests } from "./app-server/shared-client.ts";
 
-type RecordedRequest = { method: string; params?: unknown };
-
-type FakeClientControl = {
+type AutoHarness = {
   client: CodexAppServerClient;
-  requests: RecordedRequest[];
-  notificationHandlers: CodexServerNotificationHandler[];
-  requestHandlers: CodexServerRequestHandler[];
-  responsesByMethod: Map<string, unknown>;
+  writes: string[];
+  process: EventEmitter & {
+    stdin: Writable;
+    stdout: PassThrough;
+    stderr: PassThrough;
+    killed: boolean;
+    kill: ReturnType<typeof mock>;
+  };
+  responses: Map<string, unknown>;
+  requestsByMethod: Map<string, unknown[]>;
 };
 
-const state: { current: FakeClientControl | null } = { current: null };
+// Builds a real CodexAppServerClient backed by a fake transport, and installs
+// a stdin interceptor that auto-replies to every outgoing JSON-RPC request
+// whose method has an entry in `responses`. This keeps agent.ts running the
+// production code path (no mock.module) while letting each test script the
+// transport replies.
+function createAutoHarness(): AutoHarness {
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const writes: string[] = [];
+  const responses = new Map<string, unknown>();
+  const requestsByMethod = new Map<string, unknown[]>();
 
-function buildFakeClient(): FakeClientControl {
-  const requests: RecordedRequest[] = [];
-  const notificationHandlers: CodexServerNotificationHandler[] = [];
-  const requestHandlers: CodexServerRequestHandler[] = [];
-  const closeHandlers: Array<(client: CodexAppServerClient) => void> = [];
-  const responsesByMethod = new Map<string, unknown>();
-
-  const client = {
-    async request(method: string, params?: unknown) {
-      requests.push({ method, params });
-      if (!responsesByMethod.has(method)) {
-        return {};
+  const stdin = new Writable({
+    write(chunk, _encoding, callback) {
+      const text = chunk.toString();
+      writes.push(text);
+      try {
+        const frame = JSON.parse(text) as { id?: number | string; method?: string; params?: unknown };
+        if (frame.method) {
+          const existing = requestsByMethod.get(frame.method) ?? [];
+          existing.push(frame.params);
+          requestsByMethod.set(frame.method, existing);
+          if (frame.id !== undefined && responses.has(frame.method)) {
+            setImmediate(() => {
+              stdout.write(
+                `${JSON.stringify({ id: frame.id, result: responses.get(frame.method!) })}\n`,
+              );
+            });
+          }
+        }
+      } catch {
+        // non-JSON frames are ignored in the tests.
       }
-      return responsesByMethod.get(method);
+      callback();
     },
-    notify() {},
-    addRequestHandler(handler: CodexServerRequestHandler) {
-      requestHandlers.push(handler);
-      return () => {
-        const index = requestHandlers.indexOf(handler);
-        if (index !== -1) requestHandlers.splice(index, 1);
-      };
-    },
-    addNotificationHandler(handler: CodexServerNotificationHandler) {
-      notificationHandlers.push(handler);
-      return () => {
-        const index = notificationHandlers.indexOf(handler);
-        if (index !== -1) notificationHandlers.splice(index, 1);
-      };
-    },
-    addCloseHandler(handler: (client: CodexAppServerClient) => void) {
-      closeHandlers.push(handler);
-      return () => {
-        const index = closeHandlers.indexOf(handler);
-        if (index !== -1) closeHandlers.splice(index, 1);
-      };
-    },
-    close() {},
-  } as unknown as CodexAppServerClient;
+  });
 
-  return { client, requests, notificationHandlers, requestHandlers, responsesByMethod };
+  const child = Object.assign(new EventEmitter(), {
+    stdin,
+    stdout,
+    stderr,
+    killed: false,
+    kill: mock(() => {
+      child.killed = true;
+      return true;
+    }),
+  });
+  const client = CodexAppServerClient.fromTransportForTests(
+    child as unknown as CodexAppServerTransport,
+  );
+
+  return { client, writes, process: child, responses, requestsByMethod };
 }
 
-mock.module("./app-server/shared-client.ts", () => ({
-  getSharedCodexAppServerClient: async () => {
-    if (!state.current) {
-      state.current = buildFakeClient();
-    }
-    return state.current.client;
-  },
-  clearSharedCodexAppServerClient: () => {
-    state.current = null;
-  },
-  resetSharedCodexAppServerClientForTests: () => {
-    state.current = null;
-  },
-  createIsolatedCodexAppServerClient: async () => {
-    const isolated = buildFakeClient();
-    return isolated.client;
-  },
-}));
+const MODEL_LIST_RESPONSE = {
+  data: [
+    {
+      id: "gpt-5",
+      displayName: "GPT-5",
+      description: "Default",
+      isDefault: true,
+    },
+    {
+      id: "gpt-5-codex",
+      displayName: "GPT-5 Codex",
+      description: null,
+      isDefault: false,
+    },
+  ],
+};
 
-const { CodexAcpAgent } = await import("./agent.ts");
+function seedHandshakeAndModels(harness: AutoHarness): void {
+  harness.responses.set("initialize", {
+    userAgent: `codex_cli_rs/${MIN_CODEX_APP_SERVER_VERSION} (macOS; test)`,
+  });
+  harness.responses.set("model/list", MODEL_LIST_RESPONSE);
+}
+
+function seedThreadStart(harness: AutoHarness, threadId = "thread-abc"): void {
+  seedHandshakeAndModels(harness);
+  harness.responses.set("thread/start", {
+    thread: { id: threadId },
+    cwd: "/repo",
+    approvalPolicy: "on-request",
+    model: "gpt-5",
+  });
+}
 
 type FakeConnection = AgentSideConnection & {
   sessionUpdates: SessionNotification[];
@@ -108,40 +135,20 @@ function buildFakeConnection(): FakeConnection {
   return connection;
 }
 
-const MODEL_LIST_RESPONSE = {
-  data: [
-    {
-      id: "gpt-5",
-      displayName: "GPT-5",
-      description: "Default",
-      isDefault: true,
-    },
-    {
-      id: "gpt-5-codex",
-      displayName: "GPT-5 Codex",
-      description: null,
-      isDefault: false,
-    },
-  ],
-};
-
-function seedThreadStart(responses: Map<string, unknown>, threadId = "thread-abc"): void {
-  responses.set("model/list", MODEL_LIST_RESPONSE);
-  responses.set("thread/start", {
-    thread: { id: threadId },
-    cwd: "/repo",
-    approvalPolicy: "on-request",
-    model: "gpt-5",
-    modelProvider: "openai",
-  });
+function installHarness(): AutoHarness {
+  const harness = createAutoHarness();
+  spyOn(CodexAppServerClient, "start").mockReturnValue(harness.client);
+  return harness;
 }
 
-beforeEach(() => {
-  state.current = buildFakeClient();
+afterEach(() => {
+  resetSharedCodexAppServerClientForTests();
+  mock.restore();
 });
 
 describe("CodexAcpAgent.initialize", () => {
   test("advertises session capabilities, auth methods, and protocol version", async () => {
+    installHarness();
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
 
@@ -167,9 +174,9 @@ describe("CodexAcpAgent.initialize", () => {
   });
 
   test("enables extension methods when the client advertises the capability", async () => {
+    const harness = installHarness();
+    seedThreadStart(harness);
     const connection = buildFakeConnection();
-    // Return a command list only if extensions are on; the agent calls extMethod
-    // during newSession when extensions are enabled.
     let extensionsCalled = 0;
     (connection as { extMethod: unknown }).extMethod = async (method: string) => {
       if (method === "codex/available_commands") {
@@ -184,7 +191,6 @@ describe("CodexAcpAgent.initialize", () => {
       protocolVersion: 1,
       clientCapabilities: { _meta: { "codex-extension-methods": true } },
     });
-    seedThreadStart(state.current!.responsesByMethod);
     await agent.newSession({ cwd: "/repo", mcpServers: [] });
 
     expect(extensionsCalled).toBe(1);
@@ -195,11 +201,12 @@ describe("CodexAcpAgent.initialize", () => {
   });
 
   test("falls back to static available commands without the extension capability", async () => {
+    const harness = installHarness();
+    seedThreadStart(harness);
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
 
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    seedThreadStart(state.current!.responsesByMethod);
     await agent.newSession({ cwd: "/repo", mcpServers: [] });
 
     const update = connection.sessionUpdates.find(
@@ -214,17 +221,17 @@ describe("CodexAcpAgent.initialize", () => {
 
 describe("CodexAcpAgent.newSession", () => {
   test("issues thread/start with model, cwd, and default approval/sandbox", async () => {
+    const harness = installHarness();
+    seedThreadStart(harness);
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    seedThreadStart(state.current!.responsesByMethod);
 
     const response = await agent.newSession({ cwd: "/repo", mcpServers: [] });
 
     expect(response.sessionId).toBe("thread-abc");
-    const startRequest = state.current!.requests.find((r) => r.method === "thread/start");
-    expect(startRequest).toBeDefined();
-    expect(startRequest?.params).toMatchObject({
+    const startParams = harness.requestsByMethod.get("thread/start")?.[0] as Record<string, unknown>;
+    expect(startParams).toMatchObject({
       cwd: "/repo",
       approvalPolicy: "on-request",
       sandbox: "workspace-write",
@@ -233,10 +240,11 @@ describe("CodexAcpAgent.newSession", () => {
   });
 
   test("honors _meta.systemPrompt string as baseInstructions", async () => {
+    const harness = installHarness();
+    seedThreadStart(harness);
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    seedThreadStart(state.current!.responsesByMethod);
 
     await agent.newSession({
       cwd: "/repo",
@@ -244,15 +252,16 @@ describe("CodexAcpAgent.newSession", () => {
       _meta: { systemPrompt: "Be concise." },
     });
 
-    const startRequest = state.current!.requests.find((r) => r.method === "thread/start");
-    expect(startRequest?.params).toMatchObject({ baseInstructions: "Be concise." });
+    const startParams = harness.requestsByMethod.get("thread/start")?.[0] as Record<string, unknown>;
+    expect(startParams).toMatchObject({ baseInstructions: "Be concise." });
   });
 
   test("honors _meta.systemPrompt.append as developerInstructions", async () => {
+    const harness = installHarness();
+    seedThreadStart(harness);
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    seedThreadStart(state.current!.responsesByMethod);
 
     await agent.newSession({
       cwd: "/repo",
@@ -260,17 +269,16 @@ describe("CodexAcpAgent.newSession", () => {
       _meta: { systemPrompt: { append: "Add these rules." } },
     });
 
-    const startRequest = state.current!.requests.find((r) => r.method === "thread/start");
-    expect(startRequest?.params).toMatchObject({
-      developerInstructions: "Add these rules.",
-    });
+    const startParams = harness.requestsByMethod.get("thread/start")?.[0] as Record<string, unknown>;
+    expect(startParams).toMatchObject({ developerInstructions: "Add these rules." });
   });
 
   test("projects ACP mcpServers into thread config", async () => {
+    const harness = installHarness();
+    seedThreadStart(harness);
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    seedThreadStart(state.current!.responsesByMethod);
 
     await agent.newSession({
       cwd: "/repo",
@@ -284,16 +292,18 @@ describe("CodexAcpAgent.newSession", () => {
       ],
     });
 
-    const startRequest = state.current!.requests.find((r) => r.method === "thread/start");
-    const params = startRequest?.params as { config?: { mcp_servers?: Record<string, unknown> } };
-    expect(params?.config?.mcp_servers?.docs).toBeDefined();
+    const startParams = harness.requestsByMethod.get("thread/start")?.[0] as {
+      config?: { mcp_servers?: Record<string, unknown> };
+    };
+    expect(startParams.config?.mcp_servers?.docs).toBeDefined();
   });
 
   test("returns configOptions with mode and model", async () => {
+    const harness = installHarness();
+    seedThreadStart(harness);
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    seedThreadStart(state.current!.responsesByMethod);
 
     const response = await agent.newSession({ cwd: "/repo", mcpServers: [] });
     const optionIds = response.configOptions?.map((option) => option.id);
@@ -304,31 +314,30 @@ describe("CodexAcpAgent.newSession", () => {
 
 describe("CodexAcpAgent.loadSession", () => {
   test("returns cached state for already-tracked sessions without reissuing resume", async () => {
+    const harness = installHarness();
+    seedThreadStart(harness, "thread-42");
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    seedThreadStart(state.current!.responsesByMethod, "thread-42");
 
     const created = await agent.newSession({ cwd: "/repo", mcpServers: [] });
-    const resumeCallsBefore = state.current!.requests.filter(
-      (r) => r.method === "thread/resume",
-    ).length;
+    const resumeCallsBefore = harness.requestsByMethod.get("thread/resume")?.length ?? 0;
 
-    const loaded = await agent.loadSession({ sessionId: created.sessionId, cwd: "/repo", mcpServers: [] });
-    const resumeCallsAfter = state.current!.requests.filter(
-      (r) => r.method === "thread/resume",
-    ).length;
+    const loaded = await agent.loadSession({
+      sessionId: created.sessionId,
+      cwd: "/repo",
+      mcpServers: [],
+    });
+    const resumeCallsAfter = harness.requestsByMethod.get("thread/resume")?.length ?? 0;
 
     expect(resumeCallsAfter).toBe(resumeCallsBefore);
     expect(loaded.models?.currentModelId).toBe("gpt-5");
   });
 
   test("issues thread/resume and replays thread history for new sessions", async () => {
-    const connection = buildFakeConnection();
-    const agent = new CodexAcpAgent(connection);
-    await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    state.current!.responsesByMethod.set("model/list", MODEL_LIST_RESPONSE);
-    state.current!.responsesByMethod.set("thread/resume", {
+    const harness = installHarness();
+    seedHandshakeAndModels(harness);
+    harness.responses.set("thread/resume", {
       thread: {
         id: "existing-thread",
         turns: [
@@ -340,11 +349,7 @@ describe("CodexAcpAgent.loadSession", () => {
                 type: "userMessage",
                 content: [{ type: "text", text: "hi" }],
               },
-              {
-                id: "item-2",
-                type: "agentMessage",
-                text: "hello back",
-              },
+              { id: "item-2", type: "agentMessage", text: "hello back" },
             ],
           },
         ],
@@ -353,11 +358,14 @@ describe("CodexAcpAgent.loadSession", () => {
       approvalPolicy: "on-request",
       model: "gpt-5",
     });
+    const connection = buildFakeConnection();
+    const agent = new CodexAcpAgent(connection);
+    await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
 
     await agent.loadSession({ sessionId: "existing-thread", cwd: "/repo", mcpServers: [] });
 
-    const resumeRequest = state.current!.requests.find((r) => r.method === "thread/resume");
-    expect(resumeRequest?.params).toMatchObject({ threadId: "existing-thread", cwd: "/repo" });
+    const resumeParams = harness.requestsByMethod.get("thread/resume")?.[0] as Record<string, unknown>;
+    expect(resumeParams).toMatchObject({ threadId: "existing-thread", cwd: "/repo" });
 
     const userEcho = connection.sessionUpdates.find(
       (notification) => notification.update.sessionUpdate === "user_message_chunk",
@@ -372,11 +380,9 @@ describe("CodexAcpAgent.loadSession", () => {
 
 describe("CodexAcpAgent.unstable_resumeSession", () => {
   test("resumes without history replay", async () => {
-    const connection = buildFakeConnection();
-    const agent = new CodexAcpAgent(connection);
-    await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    state.current!.responsesByMethod.set("model/list", MODEL_LIST_RESPONSE);
-    state.current!.responsesByMethod.set("thread/resume", {
+    const harness = installHarness();
+    seedHandshakeAndModels(harness);
+    harness.responses.set("thread/resume", {
       thread: {
         id: "existing-thread",
         turns: [
@@ -396,6 +402,9 @@ describe("CodexAcpAgent.unstable_resumeSession", () => {
       approvalPolicy: "on-request",
       model: "gpt-5",
     });
+    const connection = buildFakeConnection();
+    const agent = new CodexAcpAgent(connection);
+    await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
 
     await agent.unstable_resumeSession({
       sessionId: "existing-thread",
@@ -412,16 +421,17 @@ describe("CodexAcpAgent.unstable_resumeSession", () => {
 
 describe("CodexAcpAgent.unstable_forkSession", () => {
   test("issues thread/fork and tracks a new session", async () => {
-    const connection = buildFakeConnection();
-    const agent = new CodexAcpAgent(connection);
-    await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    state.current!.responsesByMethod.set("model/list", MODEL_LIST_RESPONSE);
-    state.current!.responsesByMethod.set("thread/fork", {
+    const harness = installHarness();
+    seedHandshakeAndModels(harness);
+    harness.responses.set("thread/fork", {
       thread: { id: "forked-thread" },
       cwd: "/repo",
       approvalPolicy: "on-request",
       model: "gpt-5",
     });
+    const connection = buildFakeConnection();
+    const agent = new CodexAcpAgent(connection);
+    await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
 
     const response = await agent.unstable_forkSession({
       sessionId: "original-thread",
@@ -430,21 +440,22 @@ describe("CodexAcpAgent.unstable_forkSession", () => {
     });
 
     expect(response.sessionId).toBe("forked-thread");
-    const forkRequest = state.current!.requests.find((r) => r.method === "thread/fork");
-    expect(forkRequest?.params).toMatchObject({ threadId: "original-thread", cwd: "/repo" });
+    const forkParams = harness.requestsByMethod.get("thread/fork")?.[0] as Record<string, unknown>;
+    expect(forkParams).toMatchObject({ threadId: "original-thread", cwd: "/repo" });
   });
 
   test("honors _meta.systemPrompt on fork", async () => {
-    const connection = buildFakeConnection();
-    const agent = new CodexAcpAgent(connection);
-    await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    state.current!.responsesByMethod.set("model/list", MODEL_LIST_RESPONSE);
-    state.current!.responsesByMethod.set("thread/fork", {
+    const harness = installHarness();
+    seedHandshakeAndModels(harness);
+    harness.responses.set("thread/fork", {
       thread: { id: "forked-thread" },
       cwd: "/repo",
       approvalPolicy: "on-request",
       model: "gpt-5",
     });
+    const connection = buildFakeConnection();
+    const agent = new CodexAcpAgent(connection);
+    await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
 
     await agent.unstable_forkSession({
       sessionId: "original-thread",
@@ -453,24 +464,18 @@ describe("CodexAcpAgent.unstable_forkSession", () => {
       _meta: { systemPrompt: "Fresh prompt." },
     });
 
-    const forkRequest = state.current!.requests.find((r) => r.method === "thread/fork");
-    expect(forkRequest?.params).toMatchObject({ baseInstructions: "Fresh prompt." });
+    const forkParams = harness.requestsByMethod.get("thread/fork")?.[0] as Record<string, unknown>;
+    expect(forkParams).toMatchObject({ baseInstructions: "Fresh prompt." });
   });
 });
 
 describe("CodexAcpAgent.listSessions", () => {
   test("maps thread/list results into ACP session summaries", async () => {
-    const connection = buildFakeConnection();
-    const agent = new CodexAcpAgent(connection);
-    await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    state.current!.responsesByMethod.set("thread/list", {
+    const harness = installHarness();
+    seedHandshakeAndModels(harness);
+    harness.responses.set("thread/list", {
       data: [
-        {
-          id: "t1",
-          cwd: "/repo",
-          name: "First thread",
-          updatedAt: 1_700_000_000,
-        },
+        { id: "t1", cwd: "/repo", name: "First thread", updatedAt: 1_700_000_000 },
         {
           id: "t2",
           cwd: "/repo",
@@ -481,6 +486,9 @@ describe("CodexAcpAgent.listSessions", () => {
       ],
       nextCursor: "cursor-1",
     });
+    const connection = buildFakeConnection();
+    const agent = new CodexAcpAgent(connection);
+    await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
 
     const response = await agent.listSessions({ cwd: "/repo" });
 
@@ -492,22 +500,26 @@ describe("CodexAcpAgent.listSessions", () => {
   });
 
   test("uses the shared client without spawning a per-request subprocess", async () => {
+    const harness = installHarness();
+    seedHandshakeAndModels(harness);
+    harness.responses.set("thread/list", { data: [], nextCursor: null });
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    state.current!.responsesByMethod.set("thread/list", { data: [], nextCursor: null });
 
     await agent.listSessions({});
     await agent.listSessions({});
 
-    // Both calls hit the same fake client (state.current is the shared handle).
-    const listCalls = state.current!.requests.filter((r) => r.method === "thread/list");
-    expect(listCalls).toHaveLength(2);
+    // Both calls hit the same shared client, so the transport sees two
+    // thread/list frames but only one initialize handshake.
+    expect(harness.requestsByMethod.get("thread/list")).toHaveLength(2);
+    expect(harness.requestsByMethod.get("initialize")).toHaveLength(1);
   });
 });
 
 describe("CodexAcpAgent session routing", () => {
   test("prompt throws resourceNotFound for unknown sessions", async () => {
+    installHarness();
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
@@ -518,6 +530,7 @@ describe("CodexAcpAgent session routing", () => {
   });
 
   test("cancel throws resourceNotFound for unknown sessions", async () => {
+    installHarness();
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
@@ -526,6 +539,7 @@ describe("CodexAcpAgent session routing", () => {
   });
 
   test("setSessionMode throws for unknown sessions", async () => {
+    installHarness();
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
@@ -536,6 +550,7 @@ describe("CodexAcpAgent session routing", () => {
   });
 
   test("unstable_closeSession is a no-op for unknown sessions", async () => {
+    installHarness();
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
@@ -544,15 +559,15 @@ describe("CodexAcpAgent session routing", () => {
   });
 
   test("unstable_closeSession untracks the session", async () => {
+    const harness = installHarness();
+    seedThreadStart(harness, "thread-close");
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    seedThreadStart(state.current!.responsesByMethod, "thread-close");
 
     const created = await agent.newSession({ cwd: "/repo", mcpServers: [] });
     await agent.unstable_closeSession({ sessionId: created.sessionId });
 
-    // After close, prompt should throw resourceNotFound.
     await expect(
       agent.prompt({ sessionId: created.sessionId, prompt: [{ type: "text", text: "hi" }] }),
     ).rejects.toMatchObject({ code: -32002 });
@@ -561,10 +576,11 @@ describe("CodexAcpAgent session routing", () => {
 
 describe("CodexAcpAgent.setSessionConfigOption", () => {
   test("rejects non-string values", async () => {
+    const harness = installHarness();
+    seedThreadStart(harness, "thread-cfg");
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    seedThreadStart(state.current!.responsesByMethod, "thread-cfg");
     const created = await agent.newSession({ cwd: "/repo", mcpServers: [] });
 
     await expect(
@@ -577,10 +593,11 @@ describe("CodexAcpAgent.setSessionConfigOption", () => {
   });
 
   test("rejects unsupported configIds", async () => {
+    const harness = installHarness();
+    seedThreadStart(harness, "thread-cfg");
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
-    seedThreadStart(state.current!.responsesByMethod, "thread-cfg");
     const created = await agent.newSession({ cwd: "/repo", mcpServers: [] });
 
     await expect(
@@ -595,6 +612,7 @@ describe("CodexAcpAgent.setSessionConfigOption", () => {
 
 describe("CodexAcpAgent.authenticate", () => {
   test("authenticate is a no-op that resolves successfully", async () => {
+    installHarness();
     const connection = buildFakeConnection();
     const agent = new CodexAcpAgent(connection);
     await agent.initialize({ protocolVersion: 1, clientCapabilities: {} });
