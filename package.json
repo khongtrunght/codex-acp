@@ -12,6 +12,7 @@
     "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "test:integration": "RUN_INTEGRATION_TESTS=true bun test src/agent.integration.test.ts",
     "smoke": "node scripts/smoke-acp.mjs",
     "build:binary": "bun build --compile --minify --sourcemap src/index.ts --outfile dist/codex-acp-bridge",
     "build:binary:darwin-arm64": "bun build --compile --minify --sourcemap --target bun-darwin-arm64 src/index.ts --outfile dist/codex-acp-bridge-darwin-arm64",
