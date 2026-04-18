@@ -393,9 +393,15 @@ export class CodexAcpAgent implements Agent {
   ): Promise<SetSessionConfigOptionResponse> {
     const session = this.requireSession(params.sessionId);
     const value = "value" in params ? params.value : undefined;
-    if (params.configId === "mode" && typeof value === "string") {
+    if (typeof value !== "string") {
+      throw RequestError.invalidParams(
+        undefined,
+        `Invalid value for config option ${params.configId}: expected string`,
+      );
+    }
+    if (params.configId === "mode") {
       await session.setMode(value);
-    } else if (params.configId === "model" && typeof value === "string") {
+    } else if (params.configId === "model") {
       await session.setModel(value);
     } else {
       throw RequestError.invalidParams(
