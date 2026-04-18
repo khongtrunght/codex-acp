@@ -1,11 +1,52 @@
 {
   "name": "codex-acp-bridge",
   "version": "0.1.0",
-  "module": "src/index.ts",
+  "description": "ACP bridge for the Codex app-server. Run Codex from any ACP-compatible client.",
+  "license": "Apache-2.0",
+  "author": "khongtrunght",
+  "homepage": "https://github.com/khongtrunght/codex-acp-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/khongtrunght/codex-acp-bridge/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/khongtrunght/codex-acp-bridge.git"
+  },
+  "keywords": [
+    "acp",
+    "agent-client-protocol",
+    "codex",
+    "openai",
+    "zed",
+    "ide",
+    "cli"
+  ],
   "type": "module",
-  "private": true,
+  "main": "dist/lib.js",
+  "types": "dist/lib.d.ts",
+  "module": "dist/lib.js",
+  "exports": {
+    ".": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js"
+    }
+  },
   "bin": {
-    "codex-acp-bridge": "src/index.ts"
+    "codex-acp-bridge": "dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "!dist/**/*.test.*",
+    "!dist/**/*.integration.*",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
     "dev": "bun run src/index.ts",
@@ -19,6 +60,8 @@
     "test": "bun test",
     "test:integration": "RUN_INTEGRATION_TESTS=true bun test src/agent.integration.test.ts",
     "smoke": "node scripts/smoke-acp.mjs",
+    "build": "node scripts/build-npm.mjs",
+    "prepublishOnly": "bun run check && bun run test && bun run build",
     "build:binary": "bun build --compile --minify --sourcemap src/index.ts --outfile dist/codex-acp-bridge",
     "build:binary:darwin-arm64": "bun build --compile --minify --sourcemap --target bun-darwin-arm64 src/index.ts --outfile dist/codex-acp-bridge-darwin-arm64",
     "build:binary:darwin-x64": "bun build --compile --minify --sourcemap --target bun-darwin-x64 src/index.ts --outfile dist/codex-acp-bridge-darwin-x64",
