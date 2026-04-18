@@ -108,9 +108,9 @@ describe("codex app-server session binding", () => {
     });
     await clearCodexAppServerBinding(sessionFile);
     await expect(readCodexAppServerBinding(sessionFile)).resolves.toBeUndefined();
-    await expect(
-      fs.stat(resolveCodexAppServerBindingPath(sessionFile)),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(fs.stat(resolveCodexAppServerBindingPath(sessionFile))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   test("clear on a missing binding is a no-op", async () => {

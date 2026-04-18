@@ -1,8 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  codexAppServerStartOptionsKey,
-  resolveCodexAppServerRuntimeOptions,
-} from "./config.ts";
+import { codexAppServerStartOptionsKey, resolveCodexAppServerRuntimeOptions } from "./config.ts";
 
 test("uses default codex binary when env is absent", () => {
   const opts = resolveCodexAppServerRuntimeOptions({});

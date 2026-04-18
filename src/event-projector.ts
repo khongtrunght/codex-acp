@@ -338,8 +338,7 @@ export class EventProjector {
     }
     const turn = this.activeTurn;
     this.activeTurn = null;
-    const stopReason: StopReason =
-      params.turn?.status === "interrupted" ? "cancelled" : "end_turn";
+    const stopReason: StopReason = params.turn?.status === "interrupted" ? "cancelled" : "end_turn";
     turn.resolve({ stopReason, turnId: turn.turnId });
   }
 

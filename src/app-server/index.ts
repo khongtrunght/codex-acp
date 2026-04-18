@@ -51,7 +51,4 @@ export {
   type CodexAppServerThreadBinding,
 } from "./session-binding.ts";
 export { withTimeout } from "./timeout.ts";
-export {
-  closeCodexAppServerTransport,
-  type CodexAppServerTransport,
-} from "./transport.ts";
+export { closeCodexAppServerTransport, type CodexAppServerTransport } from "./transport.ts";

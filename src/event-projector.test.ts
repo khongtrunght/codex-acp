@@ -171,9 +171,9 @@ test("error notification emits chunk and resolves turn", async () => {
     } as unknown as ErrorNotification),
   );
   expect((await outcome).stopReason).toBe("end_turn");
-  expect(
-    (updates.at(-1)?.update as { content: { text: string } }).content.text,
-  ).toContain("kaboom");
+  expect((updates.at(-1)?.update as { content: { text: string } }).content.text).toContain(
+    "kaboom",
+  );
 });
 
 test("thread token usage updates emit usage_update", async () => {

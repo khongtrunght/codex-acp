@@ -45,9 +45,7 @@ Bridge chỉ gọi extension methods khi client bật:
 ```json
 {
   "success": true,
-  "contentItems": [
-    { "type": "inputText", "text": "..." }
-  ]
+  "contentItems": [{ "type": "inputText", "text": "..." }]
 }
 ```
 

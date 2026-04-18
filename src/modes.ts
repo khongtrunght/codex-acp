@@ -1,11 +1,19 @@
-import type { SessionConfigOption, SessionModeState, SessionModelState } from "@agentclientprotocol/sdk";
+import type {
+  SessionConfigOption,
+  SessionModeState,
+  SessionModelState,
+} from "@agentclientprotocol/sdk";
 import type { CodexAppServerClient } from "./app-server/client.ts";
 import type { JsonObject, ModelListResponse } from "./app-server/protocol.ts";
 
 /** Fixed set of approval modes the bridge exposes to ACP clients. */
 export const APPROVAL_MODES: SessionModeState["availableModes"] = [
   { id: "on-request", name: "On Request", description: "Prompt for sensitive operations." },
-  { id: "on-failure", name: "On Failure", description: "Prompt only when a sandboxed action fails." },
+  {
+    id: "on-failure",
+    name: "On Failure",
+    description: "Prompt only when a sandboxed action fails.",
+  },
   { id: "untrusted", name: "Untrusted", description: "Strict mode for untrusted repositories." },
   { id: "never", name: "Never", description: "Never ask for approval." },
 ];

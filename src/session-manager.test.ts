@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { AgentSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
 import { ApprovalBridge } from "./approval-bridge.ts";
-import type { CodexAppServerClient, CodexServerNotificationHandler, CodexServerRequestHandler } from "./app-server/client.ts";
+import type {
+  CodexAppServerClient,
+  CodexServerNotificationHandler,
+  CodexServerRequestHandler,
+} from "./app-server/client.ts";
 import { ExtensionClient } from "./extension.ts";
 import { CodexSession } from "./session-manager.ts";
 

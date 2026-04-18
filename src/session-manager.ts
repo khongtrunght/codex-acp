@@ -34,7 +34,12 @@ import {
   isMcpElicitationResponse,
   isToolRequestUserInputResponse,
 } from "./extension.ts";
-import { buildConfigOptions, buildModeState, mapApprovalPolicyToModeId, mapModeIdToApprovalPolicy } from "./modes.ts";
+import {
+  buildConfigOptions,
+  buildModeState,
+  mapApprovalPolicyToModeId,
+  mapModeIdToApprovalPolicy,
+} from "./modes.ts";
 import { promptToCodexInput } from "./prompt-input.ts";
 
 type CodexServerRequest = Required<Pick<RpcRequest, "id" | "method">> & { params?: JsonValue };
@@ -298,9 +303,7 @@ export class CodexSession {
     }
   }
 
-  private async handleToolRequestUserInput(
-    params: ToolRequestUserInputParams,
-  ): Promise<unknown> {
+  private async handleToolRequestUserInput(params: ToolRequestUserInputParams): Promise<unknown> {
     const extResponse = await this.extensions.call(
       CODEX_EXTENSION_METHODS.requestUserInput,
       params as unknown as Record<string, unknown>,
@@ -343,9 +346,7 @@ export class CodexSession {
     };
   }
 
-  private async handleMcpElicitation(
-    params: McpServerElicitationRequestParams,
-  ): Promise<unknown> {
+  private async handleMcpElicitation(params: McpServerElicitationRequestParams): Promise<unknown> {
     const extResponse = await this.extensions.call(
       CODEX_EXTENSION_METHODS.mcpElicitation,
       params as unknown as Record<string, unknown>,

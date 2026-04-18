@@ -22,7 +22,8 @@ class RecordingClient implements Client {
   readonly updates: SessionNotification[] = [];
 
   async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-    const allow = params.options.find((option) => option.kind === "allow_once") ?? params.options[0];
+    const allow =
+      params.options.find((option) => option.kind === "allow_once") ?? params.options[0];
     if (!allow) {
       return { outcome: { outcome: "cancelled" } };
     }
@@ -115,77 +116,65 @@ describe.skipIf(!shouldRun)("codex-acp-bridge subprocess (integration)", () => {
     expect(response.authMethods?.some((method) => method.id === "codex-cli-auth")).toBe(true);
   });
 
-  test(
-    "newSession creates a real codex thread and returns a session id",
-    async () => {
-      if (!canRunCodexTests) return;
-      const bridge = spawnBridge();
-      bridges.push(bridge);
+  test("newSession creates a real codex thread and returns a session id", async () => {
+    if (!canRunCodexTests) return;
+    const bridge = spawnBridge();
+    bridges.push(bridge);
 
-      await bridge.connection.initialize({
-        protocolVersion: PROTOCOL_VERSION,
-        clientCapabilities: {},
-      });
+    await bridge.connection.initialize({
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: {},
+    });
 
-      const session = await bridge.connection.newSession({
-        cwd: process.cwd(),
-        mcpServers: [],
-      });
+    const session = await bridge.connection.newSession({
+      cwd: process.cwd(),
+      mcpServers: [],
+    });
 
-      expect(session.sessionId).toBeTypeOf("string");
-      expect(session.sessionId.length).toBeGreaterThan(0);
+    expect(session.sessionId).toBeTypeOf("string");
+    expect(session.sessionId.length).toBeGreaterThan(0);
 
-      await bridge.connection.unstable_closeSession({ sessionId: session.sessionId });
-    },
-    30_000,
-  );
+    await bridge.connection.unstable_closeSession({ sessionId: session.sessionId });
+  }, 30_000);
 
-  test(
-    "listSessions returns the newly created session",
-    async () => {
-      if (!canRunCodexTests) return;
-      const bridge = spawnBridge();
-      bridges.push(bridge);
+  test("listSessions returns the newly created session", async () => {
+    if (!canRunCodexTests) return;
+    const bridge = spawnBridge();
+    bridges.push(bridge);
 
-      await bridge.connection.initialize({
-        protocolVersion: PROTOCOL_VERSION,
-        clientCapabilities: {},
-      });
-      const session = await bridge.connection.newSession({
-        cwd: process.cwd(),
-        mcpServers: [],
-      });
+    await bridge.connection.initialize({
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: {},
+    });
+    const session = await bridge.connection.newSession({
+      cwd: process.cwd(),
+      mcpServers: [],
+    });
 
-      const list = await bridge.connection.listSessions({});
-      expect(Array.isArray(list.sessions)).toBe(true);
+    const list = await bridge.connection.listSessions({});
+    expect(Array.isArray(list.sessions)).toBe(true);
 
-      await bridge.connection.unstable_closeSession({ sessionId: session.sessionId });
-    },
-    30_000,
-  );
+    await bridge.connection.unstable_closeSession({ sessionId: session.sessionId });
+  }, 30_000);
 
-  test(
-    "cancel on an idle session resolves without error",
-    async () => {
-      if (!canRunCodexTests) return;
-      const bridge = spawnBridge();
-      bridges.push(bridge);
+  test("cancel on an idle session resolves without error", async () => {
+    if (!canRunCodexTests) return;
+    const bridge = spawnBridge();
+    bridges.push(bridge);
 
-      await bridge.connection.initialize({
-        protocolVersion: PROTOCOL_VERSION,
-        clientCapabilities: {},
-      });
-      const session = await bridge.connection.newSession({
-        cwd: process.cwd(),
-        mcpServers: [],
-      });
+    await bridge.connection.initialize({
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: {},
+    });
+    const session = await bridge.connection.newSession({
+      cwd: process.cwd(),
+      mcpServers: [],
+    });
 
-      await expect(
-        bridge.connection.cancel({ sessionId: session.sessionId }),
-      ).resolves.toBeUndefined();
+    await expect(
+      bridge.connection.cancel({ sessionId: session.sessionId }),
+    ).resolves.toBeUndefined();
 
-      await bridge.connection.unstable_closeSession({ sessionId: session.sessionId });
-    },
-    30_000,
-  );
+    await bridge.connection.unstable_closeSession({ sessionId: session.sessionId });
+  }, 30_000);
 });

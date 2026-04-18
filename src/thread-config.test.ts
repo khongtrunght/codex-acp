@@ -17,8 +17,11 @@ test("maps SSE MCP server into mcp_servers config", () => {
     },
   ] as McpServer[]);
 
-  const servers = (config as { mcp_servers: Record<string, { url: string; http_headers?: Record<string, string> }> })
-    .mcp_servers;
+  const servers = (
+    config as {
+      mcp_servers: Record<string, { url: string; http_headers?: Record<string, string> }>;
+    }
+  ).mcp_servers;
   const server = servers.my_sse;
   if (!server) {
     throw new Error("expected my_sse config");
@@ -37,7 +40,14 @@ test("maps stdio MCP server with env map", () => {
     },
   ] as McpServer[]);
 
-  const servers = (config as { mcp_servers: Record<string, { command: string; args: string[]; env?: Record<string, string> }> }).mcp_servers;
+  const servers = (
+    config as {
+      mcp_servers: Record<
+        string,
+        { command: string; args: string[]; env?: Record<string, string> }
+      >;
+    }
+  ).mcp_servers;
   const server = servers.local;
   if (!server) {
     throw new Error("expected local config");

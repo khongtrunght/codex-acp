@@ -63,10 +63,7 @@ describe("createStdioTransport", () => {
   test("forwards stderr separately from stdout", async () => {
     const child = createStdioTransport({
       command: process.execPath,
-      args: [
-        "-e",
-        "process.stderr.write('boom'); process.stdout.write('ok'); process.exit(0);",
-      ],
+      args: ["-e", "process.stderr.write('boom'); process.stdout.write('ok'); process.exit(0);"],
       headers: {},
     });
 
@@ -91,30 +88,29 @@ describe("createStdioTransport", () => {
     expect(exit.code !== null || exit.signal !== null).toBe(true);
   });
 
-  test(
-    "detaches the child into its own process group on non-Windows platforms",
-    () => {
-      if (process.platform === "win32") {
-        return;
-      }
-      const child = createStdioTransport({
-        command: process.execPath,
-        args: ["-e", "setTimeout(() => process.exit(0), 50);"],
-        headers: {},
-      });
-      // A detached child's pid equals its process group id.
-      const pid = child.pid;
-      expect(typeof pid).toBe("number");
-      try {
-        const getpgid = (process as NodeJS.Process & {
+  test("detaches the child into its own process group on non-Windows platforms", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const child = createStdioTransport({
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => process.exit(0), 50);"],
+      headers: {},
+    });
+    // A detached child's pid equals its process group id.
+    const pid = child.pid;
+    expect(typeof pid).toBe("number");
+    try {
+      const getpgid = (
+        process as NodeJS.Process & {
           getpgid?: (pid: number) => number;
-        }).getpgid;
-        if (pid !== undefined && getpgid) {
-          expect(getpgid(pid)).toBe(pid);
         }
-      } finally {
-        child.kill?.("SIGTERM");
+      ).getpgid;
+      if (pid !== undefined && getpgid) {
+        expect(getpgid(pid)).toBe(pid);
       }
-    },
-  );
+    } finally {
+      child.kill?.("SIGTERM");
+    }
+  });
 });

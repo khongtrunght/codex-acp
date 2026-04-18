@@ -381,9 +381,7 @@ export class CodexAcpAgent implements Agent {
     return {};
   }
 
-  async unstable_setSessionModel(
-    params: SetSessionModelRequest,
-  ): Promise<SetSessionModelResponse> {
+  async unstable_setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
     await this.requireSession(params.sessionId).setModel(params.modelId);
     return {};
   }
@@ -404,10 +402,7 @@ export class CodexAcpAgent implements Agent {
     } else if (params.configId === "model") {
       await session.setModel(value);
     } else {
-      throw RequestError.invalidParams(
-        undefined,
-        `Unsupported config option: ${params.configId}`,
-      );
+      throw RequestError.invalidParams(undefined, `Unsupported config option: ${params.configId}`);
     }
     return { configOptions: session.configOptions };
   }

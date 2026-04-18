@@ -1,10 +1,7 @@
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import type {
-  AgentSideConnection,
-  SessionNotification,
-} from "@agentclientprotocol/sdk";
+import type { AgentSideConnection, SessionNotification } from "@agentclientprotocol/sdk";
 import { CodexAcpAgent } from "./agent.ts";
 import { CodexAppServerClient, MIN_CODEX_APP_SERVER_VERSION } from "./app-server/client.ts";
 import type { CodexAppServerTransport } from "./app-server/transport.ts";
@@ -41,7 +38,11 @@ function createAutoHarness(): AutoHarness {
       const text = chunk.toString();
       writes.push(text);
       try {
-        const frame = JSON.parse(text) as { id?: number | string; method?: string; params?: unknown };
+        const frame = JSON.parse(text) as {
+          id?: number | string;
+          method?: string;
+          params?: unknown;
+        };
         if (frame.method) {
           const existing = requestsByMethod.get(frame.method) ?? [];
           existing.push(frame.params);
@@ -230,7 +231,10 @@ describe("CodexAcpAgent.newSession", () => {
     const response = await agent.newSession({ cwd: "/repo", mcpServers: [] });
 
     expect(response.sessionId).toBe("thread-abc");
-    const startParams = harness.requestsByMethod.get("thread/start")?.[0] as Record<string, unknown>;
+    const startParams = harness.requestsByMethod.get("thread/start")?.[0] as Record<
+      string,
+      unknown
+    >;
     expect(startParams).toMatchObject({
       cwd: "/repo",
       approvalPolicy: "on-request",
@@ -252,7 +256,10 @@ describe("CodexAcpAgent.newSession", () => {
       _meta: { systemPrompt: "Be concise." },
     });
 
-    const startParams = harness.requestsByMethod.get("thread/start")?.[0] as Record<string, unknown>;
+    const startParams = harness.requestsByMethod.get("thread/start")?.[0] as Record<
+      string,
+      unknown
+    >;
     expect(startParams).toMatchObject({ baseInstructions: "Be concise." });
   });
 
@@ -269,7 +276,10 @@ describe("CodexAcpAgent.newSession", () => {
       _meta: { systemPrompt: { append: "Add these rules." } },
     });
 
-    const startParams = harness.requestsByMethod.get("thread/start")?.[0] as Record<string, unknown>;
+    const startParams = harness.requestsByMethod.get("thread/start")?.[0] as Record<
+      string,
+      unknown
+    >;
     expect(startParams).toMatchObject({ developerInstructions: "Add these rules." });
   });
 
@@ -364,7 +374,10 @@ describe("CodexAcpAgent.loadSession", () => {
 
     await agent.loadSession({ sessionId: "existing-thread", cwd: "/repo", mcpServers: [] });
 
-    const resumeParams = harness.requestsByMethod.get("thread/resume")?.[0] as Record<string, unknown>;
+    const resumeParams = harness.requestsByMethod.get("thread/resume")?.[0] as Record<
+      string,
+      unknown
+    >;
     expect(resumeParams).toMatchObject({ threadId: "existing-thread", cwd: "/repo" });
 
     const userEcho = connection.sessionUpdates.find(

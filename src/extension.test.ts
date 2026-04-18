@@ -62,5 +62,7 @@ test("isMcpElicitationResponse requires action and metadata fields", () => {
 
 test("isToolRequestUserInputResponse accepts answer records", () => {
   expect(isToolRequestUserInputResponse({ answers: { q: { answers: ["x"] } } })).toBe(true);
-  expect(isToolRequestUserInputResponse({ answers: null as unknown as Record<string, never> })).toBe(false);
+  expect(
+    isToolRequestUserInputResponse({ answers: null as unknown as Record<string, never> }),
+  ).toBe(false);
 });

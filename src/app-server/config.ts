@@ -50,12 +50,17 @@ export function codexAppServerStartOptionsKey(options: CodexAppServerStartOption
   return JSON.stringify({
     command: options.command,
     args: options.args,
-    headers: Object.entries(options.headers).toSorted(([left], [right]) => left.localeCompare(right)),
+    headers: Object.entries(options.headers).toSorted(([left], [right]) =>
+      left.localeCompare(right),
+    ),
   });
 }
 
 function resolveApprovalPolicy(value: unknown): CodexAppServerApprovalPolicy | undefined {
-  return value === "never" || value === "on-request" || value === "on-failure" || value === "untrusted"
+  return value === "never" ||
+    value === "on-request" ||
+    value === "on-failure" ||
+    value === "untrusted"
     ? value
     : undefined;
 }

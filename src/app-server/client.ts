@@ -1,9 +1,6 @@
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "../meta.ts";
-import {
-  resolveCodexAppServerRuntimeOptions,
-  type CodexAppServerStartOptions,
-} from "./config.ts";
+import { resolveCodexAppServerRuntimeOptions, type CodexAppServerStartOptions } from "./config.ts";
 import { logger } from "./logger.ts";
 import {
   type CodexInitializeResponse,

@@ -144,7 +144,11 @@ function buildV2ApprovalOptions(
 ): PermissionOption[] {
   const options: PermissionOption[] = [];
   const raw = "availableDecisions" in params ? params.availableDecisions : undefined;
-  const decisions = Array.isArray(raw) ? raw : kind === "command" ? COMMAND_DEFAULT_DECISIONS : ["accept", "acceptForSession", "decline"];
+  const decisions = Array.isArray(raw)
+    ? raw
+    : kind === "command"
+      ? COMMAND_DEFAULT_DECISIONS
+      : ["accept", "acceptForSession", "decline"];
 
   for (const decision of decisions) {
     if (decision === "accept") {

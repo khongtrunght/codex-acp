@@ -213,8 +213,18 @@ export type FileChangeOutputDeltaNotification = TurnScoped & {
 export type ThreadTokenUsageUpdatedNotification = TurnScoped & {
   tokenUsage?: {
     modelContextWindow?: number;
-    total?: { totalTokens?: number; inputTokens?: number; outputTokens?: number; cachedInputTokens?: number };
-    last?: { totalTokens?: number; inputTokens?: number; outputTokens?: number; cachedInputTokens?: number };
+    total?: {
+      totalTokens?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      cachedInputTokens?: number;
+    };
+    last?: {
+      totalTokens?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      cachedInputTokens?: number;
+    };
   };
 };
 

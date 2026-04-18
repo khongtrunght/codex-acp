@@ -1,10 +1,7 @@
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import {
-  CodexAppServerClient,
-  MIN_CODEX_APP_SERVER_VERSION,
-} from "./client.ts";
+import { CodexAppServerClient, MIN_CODEX_APP_SERVER_VERSION } from "./client.ts";
 import {
   clearSharedCodexAppServerClient,
   createIsolatedCodexAppServerClient,
