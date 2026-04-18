@@ -312,19 +312,21 @@ export class CodexSession {
       return extResponse;
     }
 
-    const answers: Record<string, { answers: string[] }> = {};
-    const questions = Array.isArray(params?.questions) ? params.questions : [];
-    for (const question of questions) {
-      const id = typeof question?.id === "string" ? question.id : undefined;
-      if (!id) {
-        continue;
-      }
-      const options = Array.isArray(question?.options) ? question.options : [];
-      answers[id] = {
-        answers: options.length > 0 ? [String(options[0]?.label ?? "")] : [],
-      };
-    }
-    return { answers };
+    // Safe fallback: return empty answers instead of auto-picking the first
+    // option. Auto-select is a silent auto-allow — if the first option were
+    // "Yes, delete everything" we would have answered yes without the user
+    // seeing anything. Codex's `default_mode_request_user_input` feature is
+    // off by default, so this path should rarely fire; when it does we log
+    // loudly and let the tool decide how to proceed with no answer.
+    const questionIds = Array.isArray(params?.questions)
+      ? params.questions.map((q) => q?.id).filter((id): id is string => typeof id === "string")
+      : [];
+    logger.warn("unhandled item/tool/requestUserInput; returning empty answers", {
+      threadId: params?.threadId,
+      turnId: params?.turnId,
+      questionIds,
+    });
+    return { answers: {} };
   }
 
   private async handleDynamicToolCall(params: DynamicToolCallParams): Promise<unknown> {

@@ -181,6 +181,78 @@ test("prompt sends turn/start and resolves when turn completes", async () => {
   expect(response.stopReason).toBe("end_turn");
 });
 
+test("handleToolRequestUserInput returns empty answers when extension is absent", async () => {
+  const session = buildSession(harness, { sessionId: "s", threadId: "t1" });
+  try {
+    const result = (await harness.requestHandlers[0]?.({
+      id: 42,
+      method: "item/tool/requestUserInput",
+      params: {
+        threadId: "t1",
+        turnId: "u",
+        questions: [
+          {
+            id: "q1",
+            question: "Delete everything?",
+            options: [
+              { label: "Yes", description: null },
+              { label: "No", description: null },
+            ],
+          },
+        ],
+      },
+    })) as { answers?: Record<string, unknown> };
+    // Safe fallback: empty object, NOT auto-pick of first option ("Yes").
+    expect(result.answers).toEqual({});
+  } finally {
+    await session.close();
+  }
+});
+
+test("handleToolRequestUserInput uses extension response when provided", async () => {
+  const connection = {
+    sessionUpdate: async (params: SessionNotification) => {
+      harness.updates.push(params);
+    },
+    requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+    extMethod: async () => ({
+      answers: { q1: { answers: ["custom answer"] } },
+    }),
+  } as unknown as AgentSideConnection;
+
+  const session = new CodexSession({
+    sessionId: "s",
+    cwd: "/tmp",
+    threadId: "t1",
+    approvalPolicy: "on-request",
+    client: harness.client,
+    connection,
+    models: {
+      currentModelId: "gpt",
+      availableModels: [{ modelId: "gpt", name: "GPT", description: null }],
+    },
+    extensions: new ExtensionClient(connection, true),
+    approvals: new ApprovalBridge(connection),
+  });
+
+  try {
+    const result = (await harness.requestHandlers[0]?.({
+      id: 43,
+      method: "item/tool/requestUserInput",
+      params: {
+        threadId: "t1",
+        turnId: "u",
+        questions: [
+          { id: "q1", question: "Choose one", options: [{ label: "A" }, { label: "B" }] },
+        ],
+      },
+    })) as { answers: Record<string, { answers: string[] }> };
+    expect(result.answers.q1?.answers).toEqual(["custom answer"]);
+  } finally {
+    await session.close();
+  }
+});
+
 test("cancel sends turn/interrupt for the active turn", async () => {
   const session = buildSession(harness, { sessionId: "s", threadId: "t1" });
   harness.clientResponses.set("turn/start", { turn: { id: "u1" } });
