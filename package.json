@@ -11,6 +11,11 @@
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint 'src/**/*.ts'",
+    "lint:fix": "eslint 'src/**/*.ts' --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "bun run lint && bun run format:check && bun run typecheck",
     "test": "bun test",
     "test:integration": "RUN_INTEGRATION_TESTS=true bun test src/agent.integration.test.ts",
     "smoke": "node scripts/smoke-acp.mjs",
@@ -26,7 +31,14 @@
     "@agentclientprotocol/sdk": "0.18.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bun": "latest",
+    "@typescript-eslint/eslint-plugin": "^8.58.2",
+    "@typescript-eslint/parser": "^8.58.2",
+    "eslint": "^10.2.1",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.5.0",
+    "prettier": "^3.8.3",
     "typescript": "^5.9.3"
   }
 }
